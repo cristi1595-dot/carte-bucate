@@ -4,11 +4,11 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
-  base: './', // Permite găzduirea pe GitHub Pages (subfolder) sau pe orice domeniu fără erori de căi
+  base: '/carte-bucate/', // Calea de bază pentru GitHub Pages
   server: {
-    host: '0.0.0.0', // Expune explicit pe IPv4 pentru acces direct din rețeaua locală
+    host: '0.0.0.0',
     port: 5173,
-    allowedHosts: true, // Permite accesul prin tuneluri externe (localtunnel, ngrok etc.)
+    allowedHosts: true,
   },
   plugins: [
     react(),
@@ -24,6 +24,8 @@ export default defineConfig({
         background_color: '#fcfaf6',
         display: 'standalone',
         orientation: 'portrait',
+        scope: '/carte-bucate/',
+        start_url: '/carte-bucate/',
         icons: [
           {
             src: 'favicon.svg',
@@ -33,7 +35,7 @@ export default defineConfig({
           }
         ],
         share_target: {
-          action: '/',
+          action: '/carte-bucate/',
           method: 'GET',
           params: {
             title: 'title',
