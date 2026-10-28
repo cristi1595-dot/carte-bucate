@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="3" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect width="100" height="100" rx="24" fill="url(#bgGrad)" />
+  <!-- Chef Hat & Book Icon -->
+  <g filter="url(#shadow)" fill="#ffffff">
+    <!-- Chef Hat Base -->
+    <path d="M30 62 C30 59, 70 59, 70 62 L68 70 C68 71, 32 71, 32 70 Z" />
+    <!-- Chef Hat Top / Puffs -->
+    <path d="M32 58 C24 58, 22 44, 32 40 C28 30, 42 22, 50 30 C58 22, 72 30, 68 40 C78 44, 76 58, 68 58 Z" />
+    <!-- Ribbon lines -->
+    <path d="M36 65 L64 65" stroke="#ea580c" stroke-width="2" stroke-linecap="round"/>
+  </g>
+</svg>
