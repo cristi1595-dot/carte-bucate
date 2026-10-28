@@ -108,6 +108,52 @@ export function detectStepTimer(text: string): number | undefined {
   return undefined;
 }
 
+// Extract OpenGraph / basic meta tags if Schema.org is not present
+export function parseOpenGraphMeta(html: string): { title?: string; image?: string; description?: string } {
+  const titleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+                     html.match(/<title>([^<]+)<\/title>/i);
+  const imageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i);
+  const descMatch = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i) ||
+                    html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i);
+
+  return {
+    title: titleMatch ? titleMatch[1].trim() : undefined,
+    image: imageMatch ? imageMatch[1].trim() : undefined,
+    description: descMatch ? descMatch[1].trim() : undefined,
+  };
+}
+
+// Multi-proxy CORS fetcher with timeout
+export async function fetchHtmlThroughProxies(targetUrl: string): Promise<string | null> {
+  const proxies = [
+    (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
+  ];
+
+  for (const proxyFn of proxies) {
+    try {
+      const proxyUrl = proxyFn(targetUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout per proxy
+
+      const res = await fetch(proxyUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.length > 200) {
+          return text;
+        }
+      }
+    } catch {
+      // continue to next proxy
+    }
+  }
+
+  return null;
+}
+
 // Extract Schema.org/Recipe JSON-LD from HTML string or parsed JSON
 export function parseSchemaRecipeJsonLd(htmlOrJson: string | object): Partial<{
   title: string;

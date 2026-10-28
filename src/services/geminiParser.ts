@@ -62,9 +62,10 @@ export interface ParsedRecipeData {
   notes?: string;
 }
 
-// Call Gemini API with automatic model fallback (gemini-3.8-flash -> gemini-2.0-flash -> gemini-1.5-flash)
+// Call Gemini API with automatic model fallback across stable production models
 async function callGeminiApi(payload: any, apiKey: string): Promise<string> {
-  const models = ['gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  // Prioritize gemini-2.0-flash (most stable, rarely experiences 503 high demand spikes)
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite', 'gemini-3.8-flash'];
   let lastError = '';
 
   for (const model of models) {
@@ -87,10 +88,18 @@ async function callGeminiApi(payload: any, apiKey: string): Promise<string> {
           if (errJson.error?.message) errorMsg = errJson.error.message;
         } catch {}
 
-        // If model not found or not available, try next model in fallback list
-        if (response.status === 404 || errorMsg.includes('no longer available') || errorMsg.includes('not found')) {
-          lastError = errorMsg;
-          continue;
+        // Check if error is temporary/recoverable (high demand 503, rate limit 429, not found 404)
+        const isRecoverable =
+          response.status === 503 ||
+          response.status === 429 ||
+          response.status === 404 ||
+          response.status === 500 ||
+          /high demand|spikes in demand|overload|exhausted|not found|no longer available/i.test(errorMsg);
+
+        if (isRecoverable) {
+          lastError = `${model}: ${errorMsg}`;
+          console.warn(`Gemini model ${model} temporarily unavailable, trying next model... (${errorMsg})`);
+          continue; // Try next model in fallback list
         }
 
         throw new Error(errorMsg);
@@ -105,13 +114,18 @@ async function callGeminiApi(payload: any, apiKey: string): Promise<string> {
       return rawText;
     } catch (err: any) {
       lastError = err?.message || 'Eroare la apelul Gemini API';
-      if (!lastError.includes('no longer available') && !lastError.includes('not found')) {
-        throw err;
+      const isRecoverable =
+        /high demand|spikes in demand|overload|exhausted|not found|no longer available|503|429/i.test(lastError);
+
+      if (isRecoverable && model !== models[models.length - 1]) {
+        console.warn(`Retrying with next model after error on ${model}:`, lastError);
+        continue;
       }
+      throw err;
     }
   }
 
-  throw new Error(`Nu s-a putut apela modelul Gemini: ${lastError}`);
+  throw new Error(`Toate modelele Gemini sunt momentan ocupate sau indisponibile. Ultimul răspuns: ${lastError}`);
 }
 
 function cleanAndParseJsonResponse(rawText: string): ParsedRecipeData {

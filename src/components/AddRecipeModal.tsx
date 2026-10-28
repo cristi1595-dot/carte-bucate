@@ -1,8 +1,17 @@
 import React, { useState } from 'react';
 import { RECIPE_CATEGORIES } from '../types/recipe';
 import type { Recipe, RecipeCategory, Ingredient, InstructionStep } from '../types/recipe';
-import { parseSchemaRecipeJsonLd, autoClassifyCategory } from '../services/schemaRecipeParser';
-import { parseRecipeFromText, parseRecipeFromImage, hasApiKey } from '../services/geminiParser';
+import {
+  parseSchemaRecipeJsonLd,
+  autoClassifyCategory,
+  fetchHtmlThroughProxies,
+  parseOpenGraphMeta,
+} from '../services/schemaRecipeParser';
+import {
+  extractRecipeFromText,
+  extractRecipeFromImage,
+  hasAnyAiKey,
+} from '../services/aiOrchestrator';
 import { compressImage } from '../services/imageCompression';
 import {
   X,
@@ -15,6 +24,7 @@ import {
   AlertCircle,
   Upload,
   Check,
+  Clipboard,
 } from 'lucide-react';
 
 interface AddRecipeModalProps {
@@ -127,49 +137,62 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
         return;
       }
 
-      // 2. If it's a direct URL to a webpage, try fetching through a CORS proxy or advise pasting description
+      // 2. If it's a direct URL to a webpage, try multi-proxy rotative fetch
       if (isUrl) {
         try {
-          // Attempt fetch via open proxy to get HTML metadata / JSON-LD
-          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(trimmed)}`;
-          const res = await fetch(proxyUrl);
-          if (res.ok) {
-            const data = await res.json();
-            const htmlContent = data.contents;
+          const htmlContent = await fetchHtmlThroughProxies(trimmed);
+          if (htmlContent) {
             const fetchedSchema = parseSchemaRecipeJsonLd(htmlContent);
-            if (fetchedSchema && fetchedSchema.title) {
+            if (fetchedSchema && fetchedSchema.title && fetchedSchema.ingredients?.length) {
               populateFromExtracted(fetchedSchema, trimmed);
               setIsLoading(false);
               return;
             }
+
+            // If schema not found, extract OpenGraph meta tags (title, image)
+            const meta = parseOpenGraphMeta(htmlContent);
+            if (meta.title) setTitle(meta.title);
+            if (meta.image) setRecipeImage(meta.image);
           }
-        } catch {
-          // If proxy fails (e.g. social media login wall), proceed to Gemini text parser with the text
+        } catch (e) {
+          console.warn('Proxy fetch error:', e);
         }
       }
 
-      // 3. Process text with Gemini API
-      if (!hasApiKey()) {
-        // Fallback: heuristic basic extraction
+      // 3. Process text with AI Orchestrator (Gemini 2.0 -> 1.5 -> Groq)
+      if (!hasAnyAiKey()) {
         const autoCat = autoClassifyCategory(trimmed.slice(0, 80), trimmed);
         setCategory(autoCat);
         setTitle(trimmed.split('\n')[0].slice(0, 60));
         setOriginalText(trimmed);
         setActiveTab('form');
         setErrorMessage(
-          'Rețeta a fost încărcată parțial. Pentru extragerea automată inteligentă a ingredientelor și pașilor, adaugă o cheie Gemini gratuită în Setări!'
+          'Rețeta a fost încărcată parțial. Pentru extragerea automată a ingredientelor și pașilor, adaugă o cheie gratuită Gemini sau Groq în Setări!'
         );
         setIsLoading(false);
         return;
       }
 
-      const aiData = await parseRecipeFromText(trimmed);
+      const aiData = await extractRecipeFromText(trimmed);
       populateFromExtracted(aiData, trimmed);
     } catch (err: any) {
       console.error(err);
       setErrorMessage(err?.message || 'Eroare la extragerea rețetei.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim()) {
+          setInputText(text.trim());
+        }
+      }
+    } catch (err) {
+      console.warn('Nu s-a putut citi din clipboard:', err);
     }
   };
 
@@ -193,16 +216,11 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
       return;
     }
 
-    if (!hasApiKey()) {
-      setErrorMessage('Pentru citirea textului din imagini ai nevoie de o cheie Gemini API gratuită. O poți configura în Setări.');
-      return;
-    }
-
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const aiData = await parseRecipeFromImage(imagePreview);
+      const aiData = await extractRecipeFromImage(imagePreview);
       populateFromExtracted(aiData, 'Screenshot / Imagine scanată cu rețetă');
     } catch (err: any) {
       console.error(err);
@@ -389,9 +407,19 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1.5">
-                Lipește Link-ul sau Textul Rețetei:
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">
+                  Lipește Link-ul sau Textul Rețetei:
+                </label>
+                <button
+                  type="button"
+                  onClick={handlePasteFromClipboard}
+                  className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Clipboard className="w-3.5 h-3.5" />
+                  <span>Lipește din Clipboard</span>
+                </button>
+              </div>
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
