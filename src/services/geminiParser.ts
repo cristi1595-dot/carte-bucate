@@ -21,7 +21,7 @@ Trebuie să returnezi EXCLUSIV un obiect JSON valid, fără markdown sau alte ex
 Formatul JSON OBLIGATORIU:
 {
   "title": "Titlu clar și atractiv în limba română",
-  "category": "Una din categoriile exacte: Ciorbe & Supe | Fel Principal | Mic Dejun & Brunch | Paste & Risotto | La Cuptor | La Air Fryer | Sandvișuri & Gustări | Salate & Garnituri | Prăjituri & Deserturi | Pâine & Panificație | Conserve & Murături | Sosuri & Dressinguri | Băuturi & Smoothie-uri | Altele",
+  "category": "Una din categoriile exacte: Ciorbe & Supe | Fel Principal | Mic Dejun & Brunch | Paste & Risotto | La Cuptor | La Air Fryer | Sandvișuri & Gustări | Salate & Garnituri | Prăjituri & Deserturi | Pâine & Panificație | Altele",
   "tags": ["etichetă1", "etichetă2", "etichetă3"],
   "servings": 4,
   "prepTimeMinutes": 15,

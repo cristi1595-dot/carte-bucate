@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { RECIPE_CATEGORIES } from '../types/recipe';
-import type { Recipe } from '../types/recipe';
+import { DEFAULT_CATEGORIES } from '../types/recipe';
+import type { Recipe, CategoryItem } from '../types/recipe';
 import { db } from '../db';
 import {
   X,
@@ -21,6 +21,7 @@ import {
 
 interface RecipeDetailModalProps {
   recipe: Recipe;
+  categories?: CategoryItem[];
   onClose: () => void;
   onOpenCookingMode: (recipe: Recipe) => void;
   onEditRecipe: (recipe: Recipe) => void;
@@ -30,6 +31,7 @@ interface RecipeDetailModalProps {
 
 export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
   recipe,
+  categories = DEFAULT_CATEGORIES,
   onClose,
   onOpenCookingMode,
   onEditRecipe,
@@ -44,7 +46,7 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
   const [showOriginalText, setShowOriginalText] = useState(false);
   const [addedToCartToast, setAddedToCartToast] = useState(false);
 
-  const categoryInfo = RECIPE_CATEGORIES.find((c) => c.id === recipe.category);
+  const categoryInfo = categories.find((c) => c.id === recipe.category);
   const totalTime = (recipe.prepTimeMinutes || 0) + (recipe.cookTimeMinutes || 0);
 
   // Scaling factor for portion adjustment

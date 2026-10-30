@@ -1,35 +1,29 @@
-export type RecipeCategory =
-  | 'Ciorbe & Supe'
-  | 'Fel Principal'
-  | 'Mic Dejun & Brunch'
-  | 'Paste & Risotto'
-  | 'La Cuptor'
-  | 'La Air Fryer'
-  | 'Sandvișuri & Gustări'
-  | 'Salate & Garnituri'
-  | 'Prăjituri & Deserturi'
-  | 'Pâine & Panificație'
-  | 'Conserve & Murături'
-  | 'Sosuri & Dressinguri'
-  | 'Băuturi & Smoothie-uri'
-  | 'Altele';
+export type RecipeCategory = string;
 
-export const RECIPE_CATEGORIES: { id: RecipeCategory; label: string; icon: string }[] = [
-  { id: 'Ciorbe & Supe', label: 'Ciorbe & Supe', icon: '🥣' },
-  { id: 'Fel Principal', label: 'Fel Principal', icon: '🍲' },
-  { id: 'Mic Dejun & Brunch', label: 'Mic Dejun', icon: '🍳' },
-  { id: 'Paste & Risotto', label: 'Paste & Risotto', icon: '🍝' },
-  { id: 'La Cuptor', label: 'La Cuptor', icon: '🍗' },
-  { id: 'La Air Fryer', label: 'Air Fryer', icon: '💨' },
-  { id: 'Sandvișuri & Gustări', label: 'Sandvișuri & Gustări', icon: '🥪' },
-  { id: 'Salate & Garnituri', label: 'Salate & Garnituri', icon: '🥗' },
-  { id: 'Prăjituri & Deserturi', label: 'Deserturi', icon: '🍰' },
-  { id: 'Pâine & Panificație', label: 'Panificație', icon: '🥖' },
-  { id: 'Conserve & Murături', label: 'Conserve & Murături', icon: '🥫' },
-  { id: 'Sosuri & Dressinguri', label: 'Sosuri', icon: '🍯' },
-  { id: 'Băuturi & Smoothie-uri', label: 'Băuturi', icon: '🥤' },
-  { id: 'Altele', label: 'Altele', icon: '🍽️' },
+export interface CategoryItem {
+  id: string;
+  label: string;
+  icon: string;
+  order: number;
+}
+
+// Initial simplified default categories (fără conserve, sosuri și băuturi)
+export const DEFAULT_CATEGORIES: CategoryItem[] = [
+  { id: 'Ciorbe & Supe', label: 'Ciorbe & Supe', icon: '🥣', order: 1 },
+  { id: 'Fel Principal', label: 'Fel Principal', icon: '🍲', order: 2 },
+  { id: 'Mic Dejun & Brunch', label: 'Mic Dejun', icon: '🍳', order: 3 },
+  { id: 'Paste & Risotto', label: 'Paste & Risotto', icon: '🍝', order: 4 },
+  { id: 'La Cuptor', label: 'La Cuptor', icon: '🍗', order: 5 },
+  { id: 'La Air Fryer', label: 'Air Fryer', icon: '💨', order: 6 },
+  { id: 'Sandvișuri & Gustări', label: 'Sandvișuri & Gustări', icon: '🥪', order: 7 },
+  { id: 'Salate & Garnituri', label: 'Salate & Garnituri', icon: '🥗', order: 8 },
+  { id: 'Prăjituri & Deserturi', label: 'Deserturi', icon: '🍰', order: 9 },
+  { id: 'Pâine & Panificație', label: 'Panificație', icon: '🥖', order: 10 },
+  { id: 'Altele', label: 'Altele', icon: '🍽️', order: 11 },
 ];
+
+// Backward-compatible alias for static imports
+export const RECIPE_CATEGORIES = DEFAULT_CATEGORIES;
 
 export interface Ingredient {
   id: string;
@@ -61,7 +55,7 @@ export interface Recipe {
   isFavorite: boolean;
   sourceUrl?: string;
   originalText?: string;
-  image?: string; // base64 / compressed data url
+  image?: string; // base64 / compressed data url (vizibilă în detaliul rețetei)
   createdAt: number;
   updatedAt: number;
 }
@@ -80,4 +74,5 @@ export interface AppBackup {
   exportDate: string;
   recipes: Recipe[];
   shoppingList: ShoppingItem[];
+  categories?: CategoryItem[];
 }

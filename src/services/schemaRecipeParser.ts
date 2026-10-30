@@ -75,15 +75,6 @@ export function autoClassifyCategory(title: string, rawText = ''): RecipeCategor
   if (/salat[aă]|garnitur[aă]|piure|cartofi\s*pr[aă]ji[tț]i|legume\s*la\s*gr[aă]tar/.test(combined)) {
     return 'Salate & Garnituri';
   }
-  if (/mur[aă]tur[iă]|zacusc[aă]|dulcea[tț][aă]|gem|compot|conserve/.test(combined)) {
-    return 'Conserve & Murături';
-  }
-  if (/sos\b|dressing|maionez[aă]|pesto|marinad[aă]|mujdei/.test(combined)) {
-    return 'Sosuri & Dressinguri';
-  }
-  if (/smoothie|limonad[aă]|cocktail|sirop|ceai|b[aă]utur[aă]|suc\s*natural/.test(combined)) {
-    return 'Băuturi & Smoothie-uri';
-  }
   if (/la\s*cuptor|friptur[aă]|coapt[aă]|musaca|iahnie/.test(combined)) {
     return 'La Cuptor';
   }

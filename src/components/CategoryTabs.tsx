@@ -1,23 +1,28 @@
 import React from 'react';
-import { RECIPE_CATEGORIES } from '../types/recipe';
-import type { RecipeCategory } from '../types/recipe';
+import type { CategoryItem, RecipeCategory } from '../types/recipe';
+import { DEFAULT_CATEGORIES } from '../types/recipe';
+import { SlidersHorizontal } from 'lucide-react';
 
 interface CategoryTabsProps {
+  categories?: CategoryItem[];
   selectedCategory: RecipeCategory | 'Toate';
   onSelectCategory: (category: RecipeCategory | 'Toate') => void;
   categoryCounts: Record<string, number>;
   totalCount: number;
+  onOpenManageCategories: () => void;
 }
 
 export const CategoryTabs: React.FC<CategoryTabsProps> = ({
+  categories = DEFAULT_CATEGORIES,
   selectedCategory,
   onSelectCategory,
   categoryCounts,
   totalCount,
+  onOpenManageCategories,
 }) => {
   return (
-    <div className="w-full overflow-x-auto no-scrollbar py-2">
-      <div className="flex items-center gap-2 min-w-max px-4">
+    <div className="w-full overflow-x-auto no-scrollbar py-1.5">
+      <div className="flex items-center gap-2 min-w-max px-2 sm:px-4">
         {/* 'Toate' button */}
         <button
           onClick={() => onSelectCategory('Toate')}
@@ -39,7 +44,7 @@ export const CategoryTabs: React.FC<CategoryTabsProps> = ({
         </button>
 
         {/* Categories list */}
-        {RECIPE_CATEGORIES.map((cat) => {
+        {categories.map((cat) => {
           const isSelected = selectedCategory === cat.id;
           const count = categoryCounts[cat.id] || 0;
 
@@ -67,6 +72,16 @@ export const CategoryTabs: React.FC<CategoryTabsProps> = ({
             </button>
           );
         })}
+
+        {/* Manage Categories Button */}
+        <button
+          onClick={onOpenManageCategories}
+          title="Modifică sau adaugă categorii"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 border border-dashed border-stone-300 transition-colors cursor-pointer"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 text-stone-500" />
+          <span>Categorii</span>
+        </button>
       </div>
     </div>
   );

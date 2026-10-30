@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, seedInitialRecipesIfEmpty } from './db';
 import type { Recipe, RecipeCategory } from './types/recipe';
+import { DEFAULT_CATEGORIES } from './types/recipe';
 import { Navbar } from './components/Navbar';
 import { CategoryTabs } from './components/CategoryTabs';
 import { SearchBar } from './components/SearchBar';
@@ -11,12 +12,15 @@ import { CookingModeModal } from './components/CookingModeModal';
 import { AddRecipeModal } from './components/AddRecipeModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ShoppingListModal } from './components/ShoppingListModal';
+import { ManageCategoriesModal } from './components/ManageCategoriesModal';
 import { Plus } from 'lucide-react';
 
 export function App() {
   // Database live subscriptions
   const recipes = useLiveQuery(() => db.recipes.orderBy('createdAt').reverse().toArray(), []) || [];
   const shoppingItems = useLiveQuery(() => db.shoppingList.toArray(), []) || [];
+  const categoriesQuery = useLiveQuery(() => db.categories.orderBy('order').toArray(), []);
+  const categories = categoriesQuery && categoriesQuery.length > 0 ? categoriesQuery : DEFAULT_CATEGORIES;
 
   // Filter & Search states
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory | 'Toate'>('Toate');
@@ -32,12 +36,13 @@ export function App() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isShoppingListModalOpen, setIsShoppingListModalOpen] = useState(false);
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
 
   // Share Target Web API parameters
   const [shareText, setShareText] = useState<string | undefined>(undefined);
   const [shareUrl, setShareUrl] = useState<string | undefined>(undefined);
 
-  // Seed default recipes on initial mount if database is empty
+  // Seed default recipes and initial categories on initial mount if database is empty
   useEffect(() => {
     seedInitialRecipesIfEmpty();
   }, []);
@@ -170,13 +175,15 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto w-full px-2 sm:px-4 py-3 flex-1 flex flex-col space-y-3">
+      <main className="max-w-6xl mx-auto w-full px-2 sm:px-4 py-2 sm:py-3 flex-1 flex flex-col space-y-2 sm:space-y-3">
         {/* Category Carousel Tabs */}
         <CategoryTabs
+          categories={categories}
           selectedCategory={selectedCategory}
           onSelectCategory={(cat) => setSelectedCategory(cat)}
           categoryCounts={categoryCounts}
           totalCount={recipes.length}
+          onOpenManageCategories={() => setIsManageCategoriesOpen(true)}
         />
 
         {/* Search Bar & Fridge Filter */}
@@ -192,7 +199,7 @@ export function App() {
 
         {/* Active Filters Summary if filtering */}
         {(filterFavoritesOnly || selectedCategory !== 'Toate' || searchQuery || fridgeFilterActive) && (
-          <div className="flex items-center justify-between text-xs text-stone-500 px-4 pt-1">
+          <div className="flex items-center justify-between text-xs text-stone-500 px-3 sm:px-4 pt-1">
             <span>
               Afișare: <strong>{filteredRecipes.length}</strong> rețete găsite
               {filterFavoritesOnly && ' (Doar Favorite)'}
@@ -207,20 +214,21 @@ export function App() {
                 setFridgeFilterActive(false);
                 setFridgeIngredients([]);
               }}
-              className="font-bold text-orange-600 hover:underline"
+              className="font-bold text-orange-600 hover:underline cursor-pointer"
             >
               Resetează filtrele
             </button>
           </div>
         )}
 
-        {/* Recipes Grid */}
+        {/* Recipes Grid - Compact Cards without images */}
         {filteredRecipes.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 px-2 sm:px-0 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5 px-1 sm:px-0 pt-1">
             {filteredRecipes.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
+                categories={categories}
                 onClick={() => setActiveDetailRecipe(recipe)}
                 onToggleFavorite={(e) => handleToggleFavorite(recipe, e)}
               />
@@ -269,6 +277,7 @@ export function App() {
       {activeDetailRecipe && (
         <RecipeDetailModal
           recipe={activeDetailRecipe}
+          categories={categories}
           onClose={() => setActiveDetailRecipe(null)}
           onOpenCookingMode={(recipe) => {
             setActiveDetailRecipe(null);
@@ -292,6 +301,7 @@ export function App() {
       {isAddModalOpen && (
         <AddRecipeModal
           initialRecipe={editingRecipe}
+          categories={categories}
           onClose={() => {
             setIsAddModalOpen(false);
             setEditingRecipe(null);
@@ -306,12 +316,25 @@ export function App() {
         />
       )}
 
+      {/* Manage Categories Modal */}
+      {isManageCategoriesOpen && (
+        <ManageCategoriesModal
+          categories={categories}
+          categoryCounts={categoryCounts}
+          onClose={() => setIsManageCategoriesOpen(false)}
+        />
+      )}
+
       {/* Settings Modal */}
       {isSettingsModalOpen && (
         <SettingsModal
           onClose={() => setIsSettingsModalOpen(false)}
           onRefreshData={() => {
             // Live query updates automatically
+          }}
+          onOpenManageCategories={() => {
+            setIsSettingsModalOpen(false);
+            setIsManageCategoriesOpen(true);
           }}
         />
       )}

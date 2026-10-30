@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { RECIPE_CATEGORIES } from '../types/recipe';
-import type { Recipe, RecipeCategory, Ingredient, InstructionStep } from '../types/recipe';
+import { DEFAULT_CATEGORIES } from '../types/recipe';
+import type { Recipe, RecipeCategory, CategoryItem, Ingredient, InstructionStep } from '../types/recipe';
 import {
   parseSchemaRecipeJsonLd,
   autoClassifyCategory,
@@ -29,6 +29,7 @@ import {
 
 interface AddRecipeModalProps {
   initialRecipe?: Recipe | null;
+  categories?: CategoryItem[];
   onClose: () => void;
   onSave: (recipe: Recipe) => void;
   onOpenSettings: () => void;
@@ -38,6 +39,7 @@ interface AddRecipeModalProps {
 
 export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
   initialRecipe,
+  categories = DEFAULT_CATEGORIES,
   onClose,
   onSave,
   onOpenSettings,
@@ -548,11 +550,17 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
                   onChange={(e) => setCategory(e.target.value as RecipeCategory)}
                   className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-900 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:bg-white"
                 >
-                  {RECIPE_CATEGORIES.map((cat) => (
+                  {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.icon} {cat.label}
                     </option>
                   ))}
+                  {/* If the recipe category is not currently in the categories list, still show it as an option */}
+                  {category && !categories.some((c) => c.id === category) && (
+                    <option value={category}>
+                      🍽️ {category}
+                    </option>
+                  )}
                 </select>
               </div>
             </div>

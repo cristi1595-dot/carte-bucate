@@ -15,14 +15,16 @@ import {
   Smartphone,
   ShieldCheck,
   Zap,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface SettingsModalProps {
   onClose: () => void;
   onRefreshData: () => void;
+  onOpenManageCategories?: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRefreshData }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRefreshData, onOpenManageCategories }) => {
   const [apiKey, setApiKey] = useState(getStoredApiKey());
   const [groqKey, setGroqKey] = useState(getStoredGroqApiKey());
   const [preferredProvider, setPreferred] = useState<AIProvider>(getPreferredProvider());
@@ -216,6 +218,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRefresh
               </button>
             </div>
           </div>
+
+          {/* Categories Management Section */}
+          {onOpenManageCategories && (
+            <div className="border border-stone-200 rounded-2xl p-5 bg-stone-50/50 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-stone-900 flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-orange-600" /> Gestionare Categorii
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenManageCategories();
+                  }}
+                  className="bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all cursor-pointer"
+                >
+                  Personalizează
+                </button>
+              </div>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Poți adăuga categorii noi, redenumi sau șterge categoriile existente (ex: Grătar, Paste, Mic Dejun etc.).
+              </p>
+            </div>
+          )}
 
           {/* Backup & Restore (JSON) */}
           <div className="border border-stone-200 rounded-2xl p-5 bg-white space-y-3">
