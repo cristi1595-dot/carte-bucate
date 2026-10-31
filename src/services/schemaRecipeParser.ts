@@ -114,8 +114,65 @@ export function parseOpenGraphMeta(html: string): { title?: string; image?: stri
   };
 }
 
+// Unwrap Facebook and Google redirects to find the real destination recipe URL
+export function unwrapRedirectUrl(rawUrl: string): string {
+  try {
+    const trimmed = rawUrl.trim();
+    if (!/^https?:\/\//i.test(trimmed)) return trimmed;
+
+    const parsed = new URL(trimmed);
+
+    // Facebook redirect: l.facebook.com/l.php?u=... or lm.facebook.com or fb.me
+    if (parsed.hostname.includes('facebook.com') || parsed.hostname === 'fb.me') {
+      const uParam = parsed.searchParams.get('u');
+      if (uParam) {
+        return decodeURIComponent(uParam);
+      }
+    }
+
+    // Google redirect: google.com/url?q=...
+    if (parsed.hostname.includes('google.') && parsed.pathname.includes('/url')) {
+      const qParam = parsed.searchParams.get('q') || parsed.searchParams.get('url');
+      if (qParam) return decodeURIComponent(qParam);
+    }
+
+    return trimmed;
+  } catch {
+    return rawUrl;
+  }
+}
+
+// Fetch clean page text as Markdown using Jina Reader (bypasses CORS and ads)
+export async function fetchCleanMarkdownFromUrl(targetUrl: string): Promise<string | null> {
+  const unwrapped = unwrapRedirectUrl(targetUrl);
+  try {
+    const jinaUrl = `https://r.jina.ai/${unwrapped}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch(jinaUrl, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'text/plain, text/markdown',
+      },
+    });
+    clearTimeout(timeoutId);
+
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.length > 150 && !text.includes('Log into Facebook')) {
+        return text;
+      }
+    }
+  } catch (err) {
+    console.warn('Jina Reader fetch failed, falling back to proxies:', err);
+  }
+  return null;
+}
+
 // Multi-proxy CORS fetcher with timeout
 export async function fetchHtmlThroughProxies(targetUrl: string): Promise<string | null> {
+  const unwrapped = unwrapRedirectUrl(targetUrl);
   const proxies = [
     (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
     (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
@@ -124,7 +181,7 @@ export async function fetchHtmlThroughProxies(targetUrl: string): Promise<string
 
   for (const proxyFn of proxies) {
     try {
-      const proxyUrl = proxyFn(targetUrl);
+      const proxyUrl = proxyFn(unwrapped);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 7000); // 7s timeout per proxy
 

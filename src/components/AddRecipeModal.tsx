@@ -5,6 +5,8 @@ import {
   parseSchemaRecipeJsonLd,
   autoClassifyCategory,
   fetchHtmlThroughProxies,
+  fetchCleanMarkdownFromUrl,
+  unwrapRedirectUrl,
   parseOpenGraphMeta,
 } from '../services/schemaRecipeParser';
 import {
@@ -60,6 +62,8 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
   // Loading & Error states
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [ocrInfo, setOcrInfo] = useState<{ progress: number; status: string } | null>(null);
+  const [facebookGuidance, setFacebookGuidance] = useState<boolean>(false);
 
   // Form Fields (Editable Recipe)
   const [title, setTitle] = useState(initialRecipe?.title || '');
@@ -110,28 +114,31 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
 
     setIsLoading(true);
     setErrorMessage(null);
+    setFacebookGuidance(false);
 
     try {
       const trimmed = inputText.trim();
 
-      // Check if it's a URL
-      const isUrl = /^https?:\/\//i.test(trimmed);
+      // Unwrap any Facebook/Google redirection URLs to find the actual target website
+      const targetUrl = unwrapRedirectUrl(trimmed);
+      const isUrl = /^https?:\/\//i.test(targetUrl);
       if (isUrl) {
-        setSourceUrl(trimmed);
+        setSourceUrl(targetUrl);
       }
 
-      // Check if it's solely a social media link (which blocks anonymous web scraping)
+      // Check if it's solely an internal social media link (which blocks anonymous web scraping)
       const isSocialUrlOnly =
-        /facebook\.com|instagram\.com|tiktok\.com/i.test(trimmed) && trimmed.split(/\s+/).length === 1;
+        /facebook\.com|instagram\.com|tiktok\.com/i.test(targetUrl) && targetUrl.split(/\s+/).length === 1;
       if (isSocialUrlOnly) {
+        setFacebookGuidance(true);
         setErrorMessage(
-          'Rețelele sociale (Facebook, Instagram, TikTok) cer autentificare și blochează citirea automată a conținutului dintr-un link. Te rugăm să lipești aici textul descrierii sau comentariului unde e rețeta, ori să faci un screenshot și să folosești tab-ul „Screenshot / Poză Carte”!'
+          'Postările interne de Facebook / Instagram cer autentificare și blochează descărcarea automată a textului din link.'
         );
         setIsLoading(false);
         return;
       }
 
-      // 1. First, check if the input contains Schema.org/Recipe JSON-LD
+      // 1. Check if the raw input contains Schema.org/Recipe JSON-LD
       const schemaData = parseSchemaRecipeJsonLd(trimmed);
       if (schemaData && schemaData.title && schemaData.ingredients?.length) {
         populateFromExtracted(schemaData, trimmed);
@@ -139,19 +146,42 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
         return;
       }
 
-      // 2. If it's a direct URL to a webpage, try multi-proxy rotative fetch
+      // 2. If it's a direct URL to a webpage (Jamila, Cookpad, Savori Urbane, bloguri etc.)
       if (isUrl) {
+        // Step 2a: Try Jina Reader first (fast, bypasses CORS, strips ads and converts directly to clean markdown)
         try {
-          const htmlContent = await fetchHtmlThroughProxies(trimmed);
-          if (htmlContent) {
-            const fetchedSchema = parseSchemaRecipeJsonLd(htmlContent);
+          const cleanMarkdown = await fetchCleanMarkdownFromUrl(targetUrl);
+          if (cleanMarkdown && cleanMarkdown.length > 150) {
+            const fetchedSchema = parseSchemaRecipeJsonLd(cleanMarkdown);
             if (fetchedSchema && fetchedSchema.title && fetchedSchema.ingredients?.length) {
-              populateFromExtracted(fetchedSchema, trimmed);
+              populateFromExtracted(fetchedSchema, targetUrl);
               setIsLoading(false);
               return;
             }
 
-            // If schema not found, extract OpenGraph meta tags (title, image)
+            // If no embedded schema, feed the clean markdown to AI (DeepSeek / Gemini / Groq)
+            if (hasAnyAiKey()) {
+              const aiData = await extractRecipeFromText(cleanMarkdown);
+              populateFromExtracted(aiData, targetUrl);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (jinaErr) {
+          console.warn('Jina Reader error, trying proxy fallback:', jinaErr);
+        }
+
+        // Step 2b: Fallback to multi-proxy fetch
+        try {
+          const htmlContent = await fetchHtmlThroughProxies(targetUrl);
+          if (htmlContent) {
+            const fetchedSchema = parseSchemaRecipeJsonLd(htmlContent);
+            if (fetchedSchema && fetchedSchema.title && fetchedSchema.ingredients?.length) {
+              populateFromExtracted(fetchedSchema, targetUrl);
+              setIsLoading(false);
+              return;
+            }
+
             const meta = parseOpenGraphMeta(htmlContent);
             if (meta.title) setTitle(meta.title);
             if (meta.image) setRecipeImage(meta.image);
@@ -161,7 +191,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
         }
       }
 
-      // 3. Process text with AI Orchestrator (Gemini 2.0 -> 1.5 -> Groq)
+      // 3. Process text with AI Orchestrator (DeepSeek V3 -> Gemini -> Groq)
       if (!hasAnyAiKey()) {
         const autoCat = autoClassifyCategory(trimmed.slice(0, 80), trimmed);
         setCategory(autoCat);
@@ -169,7 +199,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
         setOriginalText(trimmed);
         setActiveTab('form');
         setErrorMessage(
-          'Rețeta a fost încărcată parțial. Pentru extragerea automată a ingredientelor și pașilor, adaugă o cheie gratuită Gemini sau Groq în Setări!'
+          'Rețeta a fost încărcată parțial. Pentru extragerea automată a ingredientelor și pașilor, adaugă o cheie DeepSeek, Gemini sau Groq în Setări!'
         );
         setIsLoading(false);
         return;
@@ -191,6 +221,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
         const text = await navigator.clipboard.readText();
         if (text && text.trim()) {
           setInputText(text.trim());
+          setFacebookGuidance(false);
         }
       }
     } catch (err) {
@@ -198,7 +229,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
     }
   };
 
-  // Handler for image / screenshot upload & Gemini Vision parsing
+  // Handler for image / screenshot upload & OCR / Vision parsing
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -220,15 +251,19 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
 
     setIsLoading(true);
     setErrorMessage(null);
+    setOcrInfo({ progress: 10, status: 'Pornire scaner OCR...' });
 
     try {
-      const aiData = await extractRecipeFromImage(imagePreview);
+      const aiData = await extractRecipeFromImage(imagePreview, (info) => {
+        setOcrInfo(info);
+      });
       populateFromExtracted(aiData, 'Screenshot / Imagine scanată cu rețetă');
     } catch (err: any) {
       console.error(err);
-      setErrorMessage(err?.message || 'Eroare la citirea imaginii cu Gemini Vision.');
+      setErrorMessage(err?.message || 'Eroare la scanarea imaginii.');
     } finally {
       setIsLoading(false);
+      setOcrInfo(null);
     }
   };
 
@@ -374,24 +409,52 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
           </div>
         )}
 
-        {/* Error Alert */}
+        {/* Error Alert & Facebook Guidance */}
         {errorMessage && (
-          <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-xs sm:text-sm text-rose-800">
-            <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <span>{errorMessage}</span>
-              {errorMessage.includes('Gemini') && (
-                <button
-                  onClick={onOpenSettings}
-                  className="block mt-1 font-bold text-orange-700 hover:underline"
-                >
-                  ⚙️ Deschide Setări pentru a introduce cheia gratuită
-                </button>
-              )}
+          <div className="mx-6 mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-3 text-xs sm:text-sm text-rose-800">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-rose-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <span>{errorMessage}</span>
+                {errorMessage.includes('Setări') && (
+                  <button
+                    onClick={onOpenSettings}
+                    className="block mt-1 font-bold text-orange-700 hover:underline"
+                  >
+                    ⚙️ Deschide Setări pentru a configura cheia AI
+                  </button>
+                )}
+              </div>
+              <button onClick={() => { setErrorMessage(null); setFacebookGuidance(false); }} className="text-rose-500 hover:text-rose-700">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700">
-              <X className="w-4 h-4" />
-            </button>
+
+            {/* Facebook Quick Actions */}
+            {facebookGuidance && (
+              <div className="pt-2 border-t border-rose-200/80 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={handlePasteFromClipboard}
+                  className="flex items-center justify-center gap-1.5 bg-white hover:bg-stone-50 border border-stone-200 text-stone-800 font-bold py-2 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  <Clipboard className="w-3.5 h-3.5 text-orange-600" />
+                  <span>1. Lipește textul din Facebook</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('image');
+                    setErrorMessage(null);
+                    setFacebookGuidance(false);
+                  }}
+                  className="flex items-center justify-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-3 rounded-xl shadow-xs transition-all cursor-pointer"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>2. Fă Screenshot & Scanează</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -404,7 +467,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
                 Cum funcționează ingestia inteligentă:
               </p>
               <p className="text-stone-700 leading-relaxed">
-                Lipește link-ul rețetei (dacă e de pe un blog/site) <strong>sau</strong> textul postării / descrierii din Facebook, TikTok, YouTube sau Instagram. Inteligența artificială va detecta automat ingredientele, gramajele, pașii și categoria potrivită.
+                Lipește link-ul rețetei (de pe bloguri precum Jamila, Savori Urbane, etc.) <strong>sau</strong> textul copiat din postările de Facebook, TikTok sau Instagram. Tehnologia AI (DeepSeek / Gemini) va extrage instantaneu ingredientele, gramajele și timpii de preparare.
               </p>
             </div>
 
@@ -457,10 +520,10 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
             <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-4 text-xs sm:text-sm text-amber-950">
               <p className="font-semibold flex items-center gap-1.5 mb-1">
                 <Camera className="w-4 h-4 text-amber-600" />
-                Fotografie sau Screenshot din carte de bucate
+                Scanare Screenshot sau Poză din Carte de Bucate
               </p>
               <p className="text-stone-700 leading-relaxed">
-                Fă o poză paginii din cartea de bucate a bunicii sau încarcă un screenshot de pe telefon. Tehnologia Gemini Vision citește textul și îl transformă instantaneu în rețetă salvată.
+                Fă un screenshot la o postare de Facebook / Instagram sau fotografiază o pagină dintr-o carte de bucate. Motorul OCR local citește textul direct pe dispozitivul tău, iar inteligența artificială îl transformă în rețetă salvată.
               </p>
             </div>
 
@@ -503,6 +566,25 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
               )}
             </div>
 
+            {/* Live Progress Indicator during OCR / AI Parsing */}
+            {ocrInfo && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-2 text-xs text-indigo-950">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    {ocrInfo.status}
+                  </span>
+                  <span className="text-indigo-600 font-mono">{ocrInfo.progress}%</span>
+                </div>
+                <div className="w-full bg-indigo-200/70 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.max(5, ocrInfo.progress)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleParseImageWithVision}
               disabled={isLoading || !imagePreview}
@@ -511,12 +593,12 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Se descifrează imaginea cu Gemini Vision...</span>
+                  <span>Se procesează imaginea...</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-5 h-5" />
-                  <span>Citește Rețeta din Imagine (Gemini Vision)</span>
+                  <span>Scanează & Extrage Rețeta (OCR + AI)</span>
                 </>
               )}
             </button>

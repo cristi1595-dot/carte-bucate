@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { DEFAULT_CATEGORIES } from '../types/recipe';
-import type { Recipe, CategoryItem } from '../types/recipe';
+import type { Recipe, CategoryItem, NutritionInfo } from '../types/recipe';
 import { db } from '../db';
 import { convertIngredientUnit, type UnitSystem } from '../services/unitConverter';
 import { parseInstructionTimers, formatTimerSeconds } from '../services/timerParser';
+import { estimateNutritionWithAI } from '../services/nutritionService';
 import {
   X,
   Clock,
@@ -26,6 +27,7 @@ import {
   Pause,
   RotateCcw,
   Volume2,
+  Sparkles,
 } from 'lucide-react';
 
 interface RecipeDetailModalProps {
@@ -73,6 +75,14 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
   const [isFavorite, setIsFavorite] = useState<boolean>(recipe.isFavorite);
   const [showOriginalText, setShowOriginalText] = useState(false);
   const [addedToCartToast, setAddedToCartToast] = useState(false);
+
+  // Nutrition AI states
+  const [nutritionInfo, setNutritionInfo] = useState<NutritionInfo | undefined>(recipe.nutrition);
+  const [isEstimatingNutrition, setIsEstimatingNutrition] = useState(false);
+
+  useEffect(() => {
+    setNutritionInfo(recipe.nutrition);
+  }, [recipe.id, recipe.nutrition]);
 
   // Quick Inline Timer states
   const [activeTimer, setActiveTimer] = useState<ActiveTimer | null>(null);
@@ -197,6 +207,26 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
     onAddToShoppingList(items);
     setAddedToCartToast(true);
     setTimeout(() => setAddedToCartToast(false), 2500);
+  };
+
+  const handleEstimateNutrition = async () => {
+    setIsEstimatingNutrition(true);
+    try {
+      const estimated = await estimateNutritionWithAI(
+        recipe.title,
+        recipe.ingredients,
+        recipe.servings || 4
+      );
+      setNutritionInfo(estimated);
+      await db.recipes.update(recipe.id, {
+        nutrition: estimated,
+        updatedAt: Date.now(),
+      });
+    } catch (err: any) {
+      alert(err?.message || 'Eroare la calcularea valorilor nutriționale cu AI.');
+    } finally {
+      setIsEstimatingNutrition(false);
+    }
   };
 
   const handlePrint = () => {
@@ -452,6 +482,126 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                 })}
               </div>
             </div>
+          </div>
+
+          {/* Nutrition Information Card */}
+          <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/30 border border-amber-200/60 rounded-2xl p-4 sm:p-5 transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🥗</span>
+                <div>
+                  <h4 className="text-sm font-bold text-stone-900 flex items-center gap-1.5">
+                    Valori Nutriționale
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full">
+                      Per porție
+                    </span>
+                  </h4>
+                  <p className="text-xs text-stone-500">
+                    {nutritionInfo ? 'Valori medii per porție estimate cu AI' : 'Estimare calorii și macronutrienți (proteine, carbohidrați, grăsimi)'}
+                  </p>
+                </div>
+              </div>
+
+              {nutritionInfo && (
+                <button
+                  onClick={handleEstimateNutrition}
+                  disabled={isEstimatingNutrition}
+                  title="Recalculează cu AI"
+                  className="no-print flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-orange-600 bg-white border border-stone-200 px-2.5 py-1.5 rounded-xl hover:border-orange-300 transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isEstimatingNutrition ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Recalculează</span>
+                </button>
+              )}
+            </div>
+
+            {nutritionInfo ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 text-center">
+                  <div className="bg-white border border-orange-200/80 rounded-xl p-2.5 shadow-2xs">
+                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">Calorii</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-stone-900 mt-0.5 block">
+                      {nutritionInfo.calories} <span className="text-xs font-semibold text-stone-500">kcal</span>
+                    </span>
+                  </div>
+                  <div className="bg-white border border-stone-200/80 rounded-xl p-2.5 shadow-2xs">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider block">Proteine</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-stone-900 mt-0.5 block">
+                      {nutritionInfo.protein} <span className="text-xs font-semibold text-stone-500">g</span>
+                    </span>
+                  </div>
+                  <div className="bg-white border border-stone-200/80 rounded-xl p-2.5 shadow-2xs">
+                    <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Carbohidrați</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-stone-900 mt-0.5 block">
+                      {nutritionInfo.carbs} <span className="text-xs font-semibold text-stone-500">g</span>
+                    </span>
+                  </div>
+                  <div className="bg-white border border-stone-200/80 rounded-xl p-2.5 shadow-2xs">
+                    <span className="text-[10px] font-bold text-rose-600 uppercase tracking-wider block">Grăsimi</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-stone-900 mt-0.5 block">
+                      {nutritionInfo.fat} <span className="text-xs font-semibold text-stone-500">g</span>
+                    </span>
+                  </div>
+                  <div className="col-span-2 sm:col-span-1 bg-white border border-stone-200/80 rounded-xl p-2.5 shadow-2xs">
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">Fibre</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-stone-900 mt-0.5 block">
+                      {nutritionInfo.fiber !== undefined ? `${nutritionInfo.fiber} ` : '- '}
+                      <span className="text-xs font-semibold text-stone-500">{nutritionInfo.fiber !== undefined ? 'g' : ''}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Macro Ratio Mini Bar */}
+                {(() => {
+                  const protKcal = (nutritionInfo.protein || 0) * 4;
+                  const carbKcal = (nutritionInfo.carbs || 0) * 4;
+                  const fatKcal = (nutritionInfo.fat || 0) * 9;
+                  const totalKcal = protKcal + carbKcal + fatKcal;
+                  if (totalKcal <= 0) return null;
+
+                  const protPct = Math.round((protKcal / totalKcal) * 100);
+                  const carbPct = Math.round((carbKcal / totalKcal) * 100);
+                  const fatPct = Math.max(0, 100 - protPct - carbPct);
+
+                  return (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="h-2 w-full bg-stone-200/70 rounded-full overflow-hidden flex">
+                        <div style={{ width: `${protPct}%` }} className="bg-emerald-500 h-full" title={`Proteine: ${protPct}%`} />
+                        <div style={{ width: `${carbPct}%` }} className="bg-amber-500 h-full" title={`Carbohidrați: ${carbPct}%`} />
+                        <div style={{ width: `${fatPct}%` }} className="bg-rose-500 h-full" title={`Grăsimi: ${fatPct}%`} />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-medium text-stone-500 px-0.5">
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                          Proteine {protPct}%
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" />
+                          Carbohidrați {carbPct}%
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" />
+                          Grăsimi {fatPct}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <button
+                onClick={handleEstimateNutrition}
+                disabled={isEstimatingNutrition}
+                className="no-print w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white hover:bg-orange-50/60 text-stone-800 hover:text-orange-700 font-bold text-xs sm:text-sm border border-dashed border-orange-300 hover:border-orange-400 transition-all cursor-pointer shadow-2xs disabled:opacity-60"
+              >
+                <Sparkles className={`w-4 h-4 text-orange-500 ${isEstimatingNutrition ? 'animate-spin text-orange-600' : ''}`} />
+                <span>
+                  {isEstimatingNutrition
+                    ? 'AI analizează ingredientele și calculează caloriile & macronutrienții...'
+                    : 'Calculează automat valorile nutriționale cu AI'}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* Ingredients Section */}

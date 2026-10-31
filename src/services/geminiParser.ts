@@ -64,8 +64,7 @@ export interface ParsedRecipeData {
 
 // Call Gemini API with automatic model fallback across stable production models
 async function callGeminiApi(payload: any, apiKey: string): Promise<string> {
-  // Prioritize gemini-2.0-flash (most stable, rarely experiences 503 high demand spikes)
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite', 'gemini-3.8-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
   let lastError = '';
 
   for (const model of models) {
@@ -87,6 +86,14 @@ async function callGeminiApi(payload: any, apiKey: string): Promise<string> {
           const errJson = JSON.parse(errorText);
           if (errJson.error?.message) errorMsg = errJson.error.message;
         } catch {}
+
+        if (response.status === 400 && /API key not valid|keyInvalid/i.test(errorMsg)) {
+          throw new Error('Cheia Gemini API este invalidă. Asigură-te că folosești o cheie generată pe Google AI Studio (începe cu "AIzaSy...").');
+        }
+
+        if (response.status === 403) {
+          throw new Error(`Acces refuzat pentru cheia Gemini: ${errorMsg}`);
+        }
 
         // Check if error is temporary/recoverable (high demand 503, rate limit 429, not found 404)
         const isRecoverable =

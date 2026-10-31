@@ -40,6 +40,15 @@ export interface InstructionStep {
   timerMinutes?: number;
 }
 
+export interface NutritionInfo {
+  calories: number; // kcal per serving
+  protein: number;  // grams
+  carbs: number;    // grams
+  fat: number;      // grams
+  fiber?: number;   // grams
+  estimatedAt?: number;
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -50,6 +59,7 @@ export interface Recipe {
   cookTimeMinutes?: number;
   ingredients: Ingredient[];
   instructions: InstructionStep[];
+  nutrition?: NutritionInfo;
   notes?: string;
   rating?: number; // 1 to 5
   isFavorite: boolean;
