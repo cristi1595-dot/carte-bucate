@@ -1,11 +1,12 @@
 import React from 'react';
-import { Plus, Settings, ShoppingCart, BookOpen, Heart, CalendarDays } from 'lucide-react';
+import { Plus, Settings, ShoppingCart, BookOpen, Heart, CalendarDays, Package } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAdd: () => void;
   onOpenSettings: () => void;
   onOpenShoppingList: () => void;
   onOpenMealPlanner: () => void;
+  onOpenPantry: () => void;
   shoppingListCount: number;
   filterFavoritesOnly: boolean;
   onToggleFavoritesOnly: () => void;
@@ -17,6 +18,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onOpenShoppingList,
   onOpenMealPlanner,
+  onOpenPantry,
   shoppingListCount,
   filterFavoritesOnly,
   onToggleFavoritesOnly,
@@ -69,6 +71,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           >
             <CalendarDays className="w-5 h-5" />
+          </button>
+
+          {/* Pantry Button */}
+          <button
+            onClick={onOpenPantry}
+            title="Cămară (Alimente în stoc)"
+            className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+          >
+            <Package className="w-5 h-5" />
           </button>
 
           {/* Shopping List Button */}

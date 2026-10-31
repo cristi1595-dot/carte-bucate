@@ -14,6 +14,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ShoppingListModal } from './components/ShoppingListModal';
 import { ManageCategoriesModal } from './components/ManageCategoriesModal';
 import { MealPlannerModal } from './components/MealPlannerModal';
+import { PantryModal } from './components/PantryModal';
 import { prepareShoppingItem } from './services/groceryClassifier';
 import { Plus } from 'lucide-react';
 
@@ -40,6 +41,7 @@ export function App() {
   const [isShoppingListModalOpen, setIsShoppingListModalOpen] = useState(false);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [isMealPlannerOpen, setIsMealPlannerOpen] = useState(false);
+  const [isPantryOpen, setIsPantryOpen] = useState(false);
 
   // Share Target Web API parameters
   const [shareText, setShareText] = useState<string | undefined>(undefined);
@@ -165,6 +167,7 @@ export function App() {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShoppingList={() => setIsShoppingListModalOpen(true)}
         onOpenMealPlanner={() => setIsMealPlannerOpen(true)}
+        onOpenPantry={() => setIsPantryOpen(true)}
         shoppingListCount={shoppingItems.filter((i) => !i.checked).length}
         filterFavoritesOnly={filterFavoritesOnly}
         onToggleFavoritesOnly={() => setFilterFavoritesOnly(!filterFavoritesOnly)}
@@ -358,6 +361,21 @@ export function App() {
           onSelectRecipe={(recipe) => {
             setIsMealPlannerOpen(false);
             setActiveDetailRecipe(recipe);
+          }}
+        />
+      )}
+
+      {/* Pantry Modal */}
+      {isPantryOpen && (
+        <PantryModal
+          onClose={() => setIsPantryOpen(false)}
+          onOpenShoppingList={() => {
+            setIsPantryOpen(false);
+            setIsShoppingListModalOpen(true);
+          }}
+          onApplyFridgeFilter={(ingredients) => {
+            setFridgeFilterActive(true);
+            setFridgeIngredients(ingredients);
           }}
         />
       )}

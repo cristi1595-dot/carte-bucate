@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { DEFAULT_CATEGORIES } from '../types/recipe';
 import type { Recipe, CategoryItem } from '../types/recipe';
 import { db } from '../db';
@@ -59,6 +60,9 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('original');
   const servings = Math.max(1, Math.round(baseServings * scaleFactor));
+
+  // Pantry items for smart inventory matching
+  const pantryItems = useLiveQuery(() => db.pantry.toArray(), []) || [];
 
   // Ingredients Strikethrough & Checked states
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
@@ -482,6 +486,12 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                 const isChecked = !!checkedIngredients[ing.id];
                 const rawAmount = ing.amount !== null && ing.amount !== undefined ? ing.amount * scaleFactor : null;
                 const converted = convertIngredientUnit(rawAmount, ing.unit, unitSystem);
+                const inPantry = pantryItems.find((p) => {
+                  if (!p.inStock) return false;
+                  const pName = p.name.toLowerCase().trim();
+                  const iName = ing.name.toLowerCase().trim();
+                  return pName.includes(iName) || iName.includes(pName);
+                });
 
                 return (
                   <li
@@ -509,6 +519,14 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
                         </strong>
                       ) : null}
                       <span>{ing.name}</span>
+                      {inPantry && (
+                        <span
+                          className="no-print text-[10px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300/70 px-1.5 py-0.5 rounded-md ml-2 inline-flex items-center gap-1 select-none"
+                          title="Ai acest ingredient în cămară"
+                        >
+                          🥫 În Cămară
+                        </span>
+                      )}
                     </span>
                   </li>
                 );

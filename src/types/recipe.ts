@@ -104,6 +104,16 @@ export interface MealPlanEntry {
   createdAt: number;
 }
 
+export interface PantryItem {
+  id: string;
+  name: string;
+  amount?: string;
+  category: SupermarketAisle | string;
+  inStock: boolean;
+  expiresAt?: string; // format 'YYYY-MM-DD'
+  updatedAt: number;
+}
+
 export interface AppBackup {
   version: number;
   exportDate: string;
@@ -111,4 +121,5 @@ export interface AppBackup {
   shoppingList: ShoppingItem[];
   categories?: CategoryItem[];
   mealPlans?: MealPlanEntry[];
+  pantry?: PantryItem[];
 }

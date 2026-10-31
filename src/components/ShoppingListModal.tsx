@@ -61,6 +61,37 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
     onRefreshItems();
   };
 
+  const handleMoveCheckedToPantry = async () => {
+    const checkedItems = items.filter((i) => i.checked);
+    if (checkedItems.length === 0) return;
+
+    const existingPantry = await db.pantry.toArray();
+    for (const item of checkedItems) {
+      const lower = item.name.toLowerCase().trim();
+      const match = existingPantry.find((p) => p.name.toLowerCase().trim() === lower);
+      if (match) {
+        await db.pantry.update(match.id, {
+          inStock: true,
+          amount: item.amount || match.amount,
+          updatedAt: Date.now(),
+        });
+      } else {
+        await db.pantry.add({
+          id: 'pantry-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          name: item.name,
+          amount: item.amount,
+          category: item.aisle || classifyAisle(item.name),
+          inStock: true,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    const checkedIds = checkedItems.map((i) => i.id);
+    await db.shoppingList.bulkDelete(checkedIds);
+    onRefreshItems();
+  };
+
   const toggleAisleCollapse = (aisle: string) => {
     setCollapsedAisles((prev) => ({ ...prev, [aisle]: !prev[aisle] }));
   };
@@ -151,12 +182,21 @@ export const ShoppingListModal: React.FC<ShoppingListModalProps> = ({
             </button>
 
             {checkedCount > 0 && (
-              <button
-                onClick={handleClearChecked}
-                className="font-semibold text-stone-500 hover:text-rose-600 cursor-pointer"
-              >
-                Șterge cele {checkedCount} bifate
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleMoveCheckedToPantry}
+                  className="font-bold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                  title="Marchează aceste ingrediente ca fiind în stoc în Cămară"
+                >
+                  Mută în Cămară ({checkedCount})
+                </button>
+                <button
+                  onClick={handleClearChecked}
+                  className="font-semibold text-stone-500 hover:text-rose-600 cursor-pointer"
+                >
+                  Șterge ({checkedCount})
+                </button>
+              </div>
             )}
           </div>
         )}
