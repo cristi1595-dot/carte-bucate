@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Settings, ShoppingCart, BookOpen, Heart, CalendarDays, Package } from 'lucide-react';
+import { Plus, Settings, ShoppingCart, BookOpen, Heart, CalendarDays, Package, Cloud } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAdd: () => void;
@@ -7,6 +7,8 @@ interface NavbarProps {
   onOpenShoppingList: () => void;
   onOpenMealPlanner: () => void;
   onOpenPantry: () => void;
+  onOpenSync: () => void;
+  syncCode?: string | null;
   shoppingListCount: number;
   filterFavoritesOnly: boolean;
   onToggleFavoritesOnly: () => void;
@@ -19,6 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenShoppingList,
   onOpenMealPlanner,
   onOpenPantry,
+  onOpenSync,
+  syncCode,
   shoppingListCount,
   filterFavoritesOnly,
   onToggleFavoritesOnly,
@@ -93,6 +97,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-600 text-white text-[11px] font-bold rounded-full flex items-center justify-center animate-pulse">
                 {shoppingListCount}
               </span>
+            )}
+          </button>
+
+          {/* Cloud Sync Button */}
+          <button
+            onClick={onOpenSync}
+            title={syncCode ? `Sincronizare Cloud Activă (${syncCode})` : 'Sincronizare Cloud (Multi-Device)'}
+            className={`relative p-2.5 rounded-xl transition-all cursor-pointer ${
+              syncCode
+                ? 'text-orange-600 bg-orange-50 hover:bg-orange-100/80 shadow-2xs'
+                : 'text-stone-600 hover:bg-stone-100'
+            }`}
+          >
+            <Cloud className="w-5 h-5" />
+            {syncCode && (
+              <span className="absolute top-2 right-2 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white" />
             )}
           </button>
 

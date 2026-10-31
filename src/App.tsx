@@ -15,6 +15,8 @@ import { ShoppingListModal } from './components/ShoppingListModal';
 import { ManageCategoriesModal } from './components/ManageCategoriesModal';
 import { MealPlannerModal } from './components/MealPlannerModal';
 import { PantryModal } from './components/PantryModal';
+import { SyncModal } from './components/SyncModal';
+import { getStoredSyncCode, startRealtimeSync } from './services/firebaseSync';
 import { prepareShoppingItem } from './services/groceryClassifier';
 import { Plus } from 'lucide-react';
 
@@ -42,6 +44,8 @@ export function App() {
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
   const [isMealPlannerOpen, setIsMealPlannerOpen] = useState(false);
   const [isPantryOpen, setIsPantryOpen] = useState(false);
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncCode, setSyncCode] = useState<string | null>(getStoredSyncCode());
 
   // Share Target Web API parameters
   const [shareText, setShareText] = useState<string | undefined>(undefined);
@@ -51,6 +55,16 @@ export function App() {
   useEffect(() => {
     seedInitialRecipesIfEmpty();
   }, []);
+
+  // Initialize Realtime Cloud Sync if room is configured
+  useEffect(() => {
+    const code = getStoredSyncCode();
+    setSyncCode(code);
+    if (code) {
+      const stop = startRealtimeSync(code);
+      return () => stop();
+    }
+  }, [syncCode]);
 
   // Check URL parameters for Web Share Target (e.g. ?title=...&text=...&url=...)
   useEffect(() => {
@@ -168,6 +182,8 @@ export function App() {
         onOpenShoppingList={() => setIsShoppingListModalOpen(true)}
         onOpenMealPlanner={() => setIsMealPlannerOpen(true)}
         onOpenPantry={() => setIsPantryOpen(true)}
+        onOpenSync={() => setIsSyncModalOpen(true)}
+        syncCode={syncCode}
         shoppingListCount={shoppingItems.filter((i) => !i.checked).length}
         filterFavoritesOnly={filterFavoritesOnly}
         onToggleFavoritesOnly={() => setFilterFavoritesOnly(!filterFavoritesOnly)}
@@ -376,6 +392,19 @@ export function App() {
           onApplyFridgeFilter={(ingredients) => {
             setFridgeFilterActive(true);
             setFridgeIngredients(ingredients);
+          }}
+        />
+      )}
+
+      {/* Cloud Sync Modal */}
+      {isSyncModalOpen && (
+        <SyncModal
+          onClose={() => {
+            setIsSyncModalOpen(false);
+            setSyncCode(getStoredSyncCode());
+          }}
+          onSyncCompleted={() => {
+            setSyncCode(getStoredSyncCode());
           }}
         />
       )}

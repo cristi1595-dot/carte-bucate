@@ -1,0 +1,390 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Application: Carte de Bucate (PWA)
+    // Architecture: Multi-device cookbook synchronization via household sync room code (`syncCode`).
+    // Root Room Path: /syncRooms/{syncCode}
+    //
+    // Constraints on `syncCode`:
+    //   - Non-empty string
+    //   - Length between 4 and 64 characters
+    //
+    // Subcollections under /syncRooms/{syncCode}:
+    //
+    // 1. Document: /syncRooms/{syncCode} (Room parent document)
+    //    Fields:
+    //      - syncCode: string (optional, 4..64 chars, must match wildcard if present)
+    //      - name: string (optional, <= 100 chars)
+    //      - ownerId: string (optional, <= 128 chars)
+    //      - createdAt: number | timestamp (optional)
+    //      - updatedAt: number | timestamp (optional)
+    //
+    // 2. Collection: /syncRooms/{syncCode}/recipes/{recipeId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars, immutable on update)
+    //      - title: string (required, 1..300 chars)
+    //      - category: string (required, 1..100 chars)
+    //      - tags: list (optional, <= 30 items)
+    //      - servings: number (required, > 0 and <= 1000)
+    //      - prepTimeMinutes: number (optional, 0..10080)
+    //      - cookTimeMinutes: number (optional, 0..10080)
+    //      - ingredients: list (required, <= 150 items)
+    //      - instructions: list (required, <= 150 items)
+    //      - nutrition: map (optional, allowed keys: calories, protein, carbs, fat, fiber, estimatedAt)
+    //      - notes: string (optional, <= 5000 chars)
+    //      - rating: number (optional, 1..5)
+    //      - isFavorite: bool (required)
+    //      - sourceUrl: string (optional, <= 2000 chars)
+    //      - originalText: string (optional, <= 50000 chars)
+    //      - image: string (optional, <= 800000 chars for compressed base64/URL data)
+    //      - createdAt: number | timestamp (required, immutable on update)
+    //      - updatedAt: number | timestamp (required)
+    //
+    // 3. Collection: /syncRooms/{syncCode}/shoppingList/{itemId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars, immutable on update)
+    //      - name: string (required, 1..200 chars)
+    //      - amount: string (optional, <= 100 chars)
+    //      - recipeTitle: string (optional, <= 200 chars)
+    //      - aisle: string (optional, <= 100 chars)
+    //      - checked: bool (required)
+    //      - createdAt: number | timestamp (required, immutable on update)
+    //      - updatedAt: number | timestamp (optional)
+    //
+    // 4. Collection: /syncRooms/{syncCode}/categories/{categoryId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars, immutable on update)
+    //      - label: string (required, 1..100 chars)
+    //      - icon: string (optional, <= 50 chars)
+    //      - order: number (required, 0..100000)
+    //      - updatedAt: number | timestamp (optional)
+    //
+    // 5. Collection: /syncRooms/{syncCode}/mealPlans/{mealPlanId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars, immutable on update)
+    //      - date: string (required, 'YYYY-MM-DD', 10 chars)
+    //      - mealType: string (required, in ['breakfast', 'lunch', 'dinner', 'snack'])
+    //      - recipeId: string (required, 1..100 chars)
+    //      - recipeTitle: string (required, 1..200 chars)
+    //      - recipeCategory: string (optional, <= 100 chars)
+    //      - servings: number (required, > 0 and <= 1000)
+    //      - createdAt: number | timestamp (required, immutable on update)
+    //      - updatedAt: number | timestamp (optional)
+    //
+    // 6. Collection: /syncRooms/{syncCode}/pantry/{pantryItemId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars, immutable on update)
+    //      - name: string (required, 1..200 chars)
+    //      - amount: string (optional, <= 100 chars)
+    //      - category: string (required, 1..100 chars)
+    //      - inStock: bool (required)
+    //      - expiresAt: string (optional, 'YYYY-MM-DD', 10 chars)
+    //      - updatedAt: number | timestamp (required)
+    //
+    // 7. Collection: /syncRooms/{syncCode}/meta/{metaId}
+    //    Fields:
+    //      - id: string (optional, <= 100 chars)
+    //      - lastSyncedAt: number | timestamp (optional)
+    //      - deviceName: string (optional, <= 100 chars)
+    //      - syncCodeHash: string (optional, <= 256 chars)
+    //      - passphrase: string (optional, <= 256 chars)
+    //      - createdAt: number | timestamp (optional, immutable on update)
+    //      - updatedAt: number | timestamp (optional)
+    //      - version: number | string (optional, <= 50 chars if string)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Global & Room Helper Functions
+    // ===============================================================
+
+    // Validates household/family sync code constraints (4 to 64 chars)
+    function isValidSyncCode(code) {
+      return code is string &&
+             code.size() >= 4 &&
+             code.size() <= 64;
+    }
+
+    // Supports both anonymous/authenticated users and open passcode room participants
+    function canAccessRoom(syncCode) {
+      return isValidSyncCode(syncCode) &&
+             (request.auth == null || request.auth.uid != null);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Supports both Unix timestamp (milliseconds) and Cloud Firestore Timestamp
+    function isValidTimestamp(val) {
+      return (val is number && val > 0) || val is timestamp;
+    }
+
+    function isValidOptionalTimestamp(field) {
+      return !(field in request.resource.data) || isValidTimestamp(request.resource.data[field]);
+    }
+
+    function isValidString(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+             request.resource.data[field].size() >= minLen &&
+             request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalNumber(field, minVal, maxVal) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is number &&
+              request.resource.data[field] >= minVal &&
+              request.resource.data[field] <= maxVal);
+    }
+
+    function isValidOptionalUrl(field) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() <= 2000 &&
+              (request.resource.data[field].matches('^https://.*') ||
+               request.resource.data[field].matches('^http://.*')));
+    }
+
+    function isValidDateString(val) {
+      return val is string && val.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function isValidOptionalDate(field) {
+      return !(field in request.resource.data) || isValidDateString(request.resource.data[field]);
+    }
+
+    // ===============================================================
+    // Domain Validator Functions (Used in both create and update)
+    // ===============================================================
+
+    function isValidSyncRoom(data, roomCode) {
+      return hasOnlyAllowedFields(['syncCode', 'name', 'ownerId', 'createdAt', 'updatedAt']) &&
+             (!('syncCode' in data) || (data.syncCode is string && data.syncCode == roomCode)) &&
+             isValidOptionalString('name', 1, 100) &&
+             isValidOptionalString('ownerId', 1, 128) &&
+             isValidOptionalTimestamp('createdAt') &&
+             isValidOptionalTimestamp('updatedAt');
+    }
+
+    function isValidNutritionMap(nut) {
+      return nut is map &&
+             nut.keys().hasOnly(['calories', 'protein', 'carbs', 'fat', 'fiber', 'estimatedAt']) &&
+             (!('calories' in nut) || (nut.calories is number && nut.calories >= 0 && nut.calories <= 50000)) &&
+             (!('protein' in nut) || (nut.protein is number && nut.protein >= 0 && nut.protein <= 5000)) &&
+             (!('carbs' in nut) || (nut.carbs is number && nut.carbs >= 0 && nut.carbs <= 5000)) &&
+             (!('fat' in nut) || (nut.fat is number && nut.fat >= 0 && nut.fat <= 5000)) &&
+             (!('fiber' in nut) || (nut.fiber is number && nut.fiber >= 0 && nut.fiber <= 5000)) &&
+             (!('estimatedAt' in nut) || (nut.estimatedAt is number && nut.estimatedAt > 0));
+    }
+
+    function isValidRecipe(data) {
+      return hasRequiredFields(['title', 'category', 'servings', 'isFavorite', 'ingredients', 'instructions', 'createdAt', 'updatedAt']) &&
+             hasOnlyAllowedFields([
+               'id', 'title', 'category', 'tags', 'servings',
+               'prepTimeMinutes', 'cookTimeMinutes', 'ingredients', 'instructions',
+               'nutrition', 'notes', 'rating', 'isFavorite', 'sourceUrl',
+               'originalText', 'image', 'createdAt', 'updatedAt'
+             ]) &&
+             isValidString('title', 1, 300) &&
+             isValidString('category', 1, 100) &&
+             (data.servings is number && data.servings > 0 && data.servings <= 1000) &&
+             (data.isFavorite is bool) &&
+             (data.ingredients is list && data.ingredients.size() <= 150) &&
+             (data.instructions is list && data.instructions.size() <= 150) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt) &&
+             isValidOptionalString('id', 1, 100) &&
+             (!('tags' in data) || (data.tags is list && data.tags.size() <= 30)) &&
+             isValidOptionalNumber('prepTimeMinutes', 0, 10080) &&
+             isValidOptionalNumber('cookTimeMinutes', 0, 10080) &&
+             isValidOptionalNumber('rating', 1, 5) &&
+             isValidOptionalString('notes', 0, 5000) &&
+             isValidOptionalUrl('sourceUrl') &&
+             isValidOptionalString('originalText', 0, 50000) &&
+             isValidOptionalString('image', 0, 800000) &&
+             (!('nutrition' in data) || isValidNutritionMap(data.nutrition));
+    }
+
+    function isValidShoppingItem(data) {
+      return hasRequiredFields(['name', 'checked', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'name', 'amount', 'recipeTitle', 'aisle', 'checked', 'createdAt', 'updatedAt']) &&
+             isValidString('name', 1, 200) &&
+             (data.checked is bool) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidOptionalString('id', 1, 100) &&
+             isValidOptionalString('amount', 1, 100) &&
+             isValidOptionalString('recipeTitle', 1, 200) &&
+             isValidOptionalString('aisle', 1, 100) &&
+             isValidOptionalTimestamp('updatedAt');
+    }
+
+    function isValidCategory(data) {
+      return hasRequiredFields(['label', 'order']) &&
+             hasOnlyAllowedFields(['id', 'label', 'icon', 'order', 'updatedAt']) &&
+             isValidString('label', 1, 100) &&
+             (data.order is number && data.order >= 0 && data.order <= 100000) &&
+             isValidOptionalString('id', 1, 100) &&
+             isValidOptionalString('icon', 0, 50) &&
+             isValidOptionalTimestamp('updatedAt');
+    }
+
+    function isValidMealPlan(data) {
+      return hasRequiredFields(['date', 'mealType', 'recipeId', 'recipeTitle', 'servings', 'createdAt']) &&
+             hasOnlyAllowedFields(['id', 'date', 'mealType', 'recipeId', 'recipeTitle', 'recipeCategory', 'servings', 'createdAt', 'updatedAt']) &&
+             isValidDateString(data.date) &&
+             (data.mealType in ['breakfast', 'lunch', 'dinner', 'snack']) &&
+             isValidString('recipeId', 1, 100) &&
+             isValidString('recipeTitle', 1, 200) &&
+             (data.servings is number && data.servings > 0 && data.servings <= 1000) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidOptionalString('id', 1, 100) &&
+             isValidOptionalString('recipeCategory', 1, 100) &&
+             isValidOptionalTimestamp('updatedAt');
+    }
+
+    function isValidPantryItem(data) {
+      return hasRequiredFields(['name', 'category', 'inStock', 'updatedAt']) &&
+             hasOnlyAllowedFields(['id', 'name', 'amount', 'category', 'inStock', 'expiresAt', 'updatedAt']) &&
+             isValidString('name', 1, 200) &&
+             isValidString('category', 1, 100) &&
+             (data.inStock is bool) &&
+             isValidTimestamp(data.updatedAt) &&
+             isValidOptionalString('id', 1, 100) &&
+             isValidOptionalString('amount', 1, 100) &&
+             isValidOptionalDate('expiresAt');
+    }
+
+    function isValidMeta(data) {
+      return hasOnlyAllowedFields(['id', 'lastSyncedAt', 'deviceName', 'syncCodeHash', 'passphrase', 'createdAt', 'updatedAt', 'version']) &&
+             isValidOptionalString('id', 1, 100) &&
+             isValidOptionalTimestamp('lastSyncedAt') &&
+             isValidOptionalString('deviceName', 1, 100) &&
+             isValidOptionalString('syncCodeHash', 1, 256) &&
+             isValidOptionalString('passphrase', 1, 256) &&
+             isValidOptionalTimestamp('createdAt') &&
+             isValidOptionalTimestamp('updatedAt') &&
+             (!('version' in data) ||
+              (data.version is number && data.version >= 1 && data.version <= 100000) ||
+              (data.version is string && data.version.size() <= 50));
+    }
+
+    // ===============================================================
+    // Security Rules & Access Control
+    // ===============================================================
+
+    // Root Default Deny: Disallow all arbitrary collections outside syncRooms
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Household Sync Rooms
+    match /syncRooms/{syncCode} {
+      // Disallow collection listing to prevent enumeration of existing sync rooms;
+      // allow direct get by syncCode for participants.
+      allow get: if canAccessRoom(syncCode);
+      allow list: if false;
+      allow create: if canAccessRoom(syncCode) && isValidSyncRoom(request.resource.data, syncCode);
+      allow update: if canAccessRoom(syncCode) &&
+                       isValidSyncRoom(request.resource.data, syncCode) &&
+                       areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if canAccessRoom(syncCode);
+
+      // 1. Recipes Collection
+      match /recipes/{recipeId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidRecipe(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == recipeId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidRecipe(request.resource.data) &&
+                         areImmutableFieldsUnchanged(['createdAt']) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+
+      // 2. Shopping List Collection
+      match /shoppingList/{itemId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidShoppingItem(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == itemId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidShoppingItem(request.resource.data) &&
+                         areImmutableFieldsUnchanged(['createdAt']) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+
+      // 3. Custom Categories Collection
+      match /categories/{categoryId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidCategory(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == categoryId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidCategory(request.resource.data) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+
+      // 4. Meal Planning Collection
+      match /mealPlans/{mealPlanId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidMealPlan(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == mealPlanId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidMealPlan(request.resource.data) &&
+                         areImmutableFieldsUnchanged(['createdAt']) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+
+      // 5. Pantry Stock Collection
+      match /pantry/{pantryItemId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidPantryItem(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == pantryItemId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidPantryItem(request.resource.data) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+
+      // 6. Room Metadata Collection
+      match /meta/{metaId} {
+        allow read: if canAccessRoom(syncCode);
+        allow create: if canAccessRoom(syncCode) &&
+                         isValidMeta(request.resource.data) &&
+                         (!('id' in request.resource.data) || request.resource.data.id == metaId);
+        allow update: if canAccessRoom(syncCode) &&
+                         isValidMeta(request.resource.data) &&
+                         areImmutableFieldsUnchanged(['createdAt']) &&
+                         (!('id' in resource.data) || !('id' in request.resource.data) || request.resource.data.id == resource.data.id);
+        allow delete: if canAccessRoom(syncCode);
+      }
+    }
+  }
+}
