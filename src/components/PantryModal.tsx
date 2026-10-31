@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
+import { db, populatePantryStaples } from '../db';
 import type { PantryItem, SupermarketAisle } from '../types/recipe';
 import { SUPERMARKET_AISLES } from '../types/recipe';
 import { classifyAisle, prepareShoppingItem, adjustQuantity } from '../services/groceryClassifier';
@@ -15,10 +15,10 @@ import {
   Check,
   Search,
   CheckCircle2,
-  AlertCircle,
   ChevronDown,
   ChevronRight,
   Filter,
+  Sparkles,
 } from 'lucide-react';
 
 interface PantryModalProps {
@@ -141,6 +141,16 @@ export const PantryModal: React.FC<PantryModalProps> = ({
 
     await db.shoppingList.bulkAdd(newShopItems);
     showToast(`${outOfStockItems.length} produse epuizate au fost adăugate în lista de cumpărături!`);
+  };
+
+  // Populate standard culinary staples (for ciorbe, mâncăruri, deserturi)
+  const handlePopulateStaples = async () => {
+    const count = await populatePantryStaples();
+    if (count > 0) {
+      showToast(`Au fost adăugate ${count} ingrediente uzuale (ciorbe, mâncăruri, deserturi)!`);
+    } else {
+      showToast('Toate ingredientele uzuale există deja în cămară!');
+    }
   };
 
   // Apply in-stock ingredients to the "Ce am în frigider" search filter on main page
@@ -295,32 +305,44 @@ export const PantryModal: React.FC<PantryModalProps> = ({
           </div>
         )}
 
-        {/* Fast Action Bar: Send all out of stock to shopping list */}
-        {outOfStockCount > 0 && stockFilter !== 'inStock' && (
-          <div className="px-6 py-2 bg-amber-50/70 border-b border-amber-200/60 flex items-center justify-between text-xs">
-            <span className="text-amber-900 font-semibold flex items-center gap-1">
-              <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-              Ai {outOfStockCount} produse epuizate
-            </span>
+        {/* Fast Action Bar: Staples & Out of stock */}
+        <div className="px-5 sm:px-6 py-2.5 bg-amber-50/70 border-b border-amber-200/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <button
+            onClick={handlePopulateStaples}
+            className="flex items-center gap-1.5 font-bold text-amber-900 hover:text-amber-950 bg-white border border-amber-300/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shadow-2xs"
+            title="Adaugă automat lista completă de ingrediente pentru ciorbe, mâncăruri și deserturi"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <span>Adaugă ingrediente uzuale (Ciorbe, Mâncăruri, Deserturi)</span>
+          </button>
+
+          {outOfStockCount > 0 && stockFilter !== 'inStock' && (
             <button
               onClick={handleSendAllOutOfStockToShopping}
-              className="flex items-center gap-1 text-xs font-bold text-amber-800 hover:text-amber-950 bg-white border border-amber-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              className="flex items-center gap-1 font-bold text-amber-800 hover:text-amber-950 bg-white border border-amber-300 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
             >
               <ShoppingCart className="w-3.5 h-3.5 text-amber-600" />
-              <span>Cumpără-le pe toate</span>
+              <span>Cumpără cele {outOfStockCount} epuizate</span>
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Pantry Items List grouped by Category */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           {filteredItems.length === 0 ? (
-            <div className="text-center py-12 space-y-2 text-stone-400">
+            <div className="text-center py-12 space-y-3 text-stone-400">
               <Package className="w-12 h-12 mx-auto stroke-1 text-stone-300" />
               <p className="text-sm font-semibold text-stone-600">Niciun produs găsit în cămară.</p>
               <p className="text-xs text-stone-400 max-w-xs mx-auto">
-                Adaugă ingredientele de bază folosind formularul de mai jos!
+                Adaugă ingredientele de bază folosind formularul de mai jos sau apasă pe butonul de mai jos!
               </p>
+              <button
+                onClick={handlePopulateStaples}
+                className="mt-2 inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Populează cu toate ingredientele de bază</span>
+              </button>
             </div>
           ) : (
             Object.keys(groupedItems).map((categoryName) => {
