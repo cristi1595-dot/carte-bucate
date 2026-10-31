@@ -3,11 +3,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import type { PantryItem, SupermarketAisle } from '../types/recipe';
 import { SUPERMARKET_AISLES } from '../types/recipe';
-import { classifyAisle, prepareShoppingItem } from '../services/groceryClassifier';
+import { classifyAisle, prepareShoppingItem, adjustQuantity } from '../services/groceryClassifier';
 import {
   X,
   Package,
   Plus,
+  Minus,
+  Pencil,
   Trash2,
   ShoppingCart,
   Check,
@@ -46,6 +48,10 @@ export const PantryModal: React.FC<PantryModalProps> = ({
   // Feedback toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Inline amount editing state
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingAmountValue, setEditingAmountValue] = useState<string>('');
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -58,6 +64,32 @@ export const PantryModal: React.FC<PantryModalProps> = ({
       inStock: updatedStock,
       updatedAt: Date.now(),
     });
+  };
+
+  // Fast +/- quantity adjustment stepper
+  const handleAdjustQuantity = async (item: PantryItem, delta: number) => {
+    const { newAmount, isZero } = adjustQuantity(item.amount, delta);
+    await db.pantry.update(item.id, {
+      amount: newAmount,
+      inStock: isZero ? false : true,
+      updatedAt: Date.now(),
+    });
+  };
+
+  const startEditingAmount = (item: PantryItem) => {
+    setEditingItemId(item.id);
+    setEditingAmountValue(item.amount || '');
+  };
+
+  const handleSaveInlineAmount = async (item: PantryItem) => {
+    const trimmed = editingAmountValue.trim();
+    const isZero = trimmed === '0' || trimmed.startsWith('0 ') || trimmed.startsWith('0g') || trimmed.startsWith('0kg');
+    await db.pantry.update(item.id, {
+      amount: trimmed || undefined,
+      inStock: isZero ? false : item.inStock,
+      updatedAt: Date.now(),
+    });
+    setEditingItemId(null);
   };
 
   // Add new item
@@ -358,11 +390,70 @@ export const PantryModal: React.FC<PantryModalProps> = ({
                               >
                                 {item.name}
                               </span>
-                              {item.amount && (
-                                <span className="text-[11px] text-stone-500 font-medium">
-                                  Cantitate: {item.amount}
-                                </span>
-                              )}
+
+                              {/* Quantity Stepper & Inline Edit */}
+                              <div className="mt-1 flex items-center gap-1.5">
+                                {editingItemId === item.id ? (
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      handleSaveInlineAmount(item);
+                                    }}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <input
+                                      type="text"
+                                      value={editingAmountValue}
+                                      onChange={(e) => setEditingAmountValue(e.target.value)}
+                                      onBlur={() => handleSaveInlineAmount(item)}
+                                      className="w-24 sm:w-28 bg-white border border-amber-400 rounded-lg px-2 py-0.5 text-xs text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                                      placeholder="ex: 500g"
+                                      autoFocus
+                                    />
+                                    <button
+                                      type="submit"
+                                      className="p-1 rounded-md bg-amber-600 text-white hover:bg-amber-700 cursor-pointer"
+                                      title="Salvează cantitatea"
+                                    >
+                                      <Check className="w-3 h-3 stroke-[3]" />
+                                    </button>
+                                  </form>
+                                ) : (
+                                  <div className="inline-flex items-center gap-1 bg-stone-100/90 border border-stone-200/90 rounded-lg p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAdjustQuantity(item, -1)}
+                                      className="p-1 rounded-md bg-white hover:bg-stone-200 text-stone-700 active:scale-90 transition-all cursor-pointer shadow-2xs"
+                                      title="Scade cantitatea (-)"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span
+                                      onClick={() => startEditingAmount(item)}
+                                      className="px-2 text-xs font-bold text-stone-800 cursor-pointer hover:bg-stone-200/70 rounded transition-colors select-none"
+                                      title="Apasă pentru a edita cantitatea"
+                                    >
+                                      {item.amount || '0'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAdjustQuantity(item, 1)}
+                                      className="p-1 rounded-md bg-white hover:bg-stone-200 text-stone-700 active:scale-90 transition-all cursor-pointer shadow-2xs"
+                                      title="Crește cantitatea (+)"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditingAmount(item)}
+                                      className="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition-colors cursor-pointer"
+                                      title="Editează manual textul"
+                                    >
+                                      <Pencil className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
 
