@@ -23,6 +23,16 @@ export const CategoryTabs: React.FC<CategoryTabsProps> = ({
   return (
     <div className="w-full overflow-x-auto no-scrollbar py-1.5">
       <div className="flex items-center gap-2 min-w-max px-2 sm:px-4">
+        {/* Manage Categories Button (in front) */}
+        <button
+          onClick={onOpenManageCategories}
+          title="Gestionează și organizează categoriile"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 hover:text-stone-900 border border-stone-200/80 transition-all cursor-pointer shadow-2xs"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5 text-orange-600" />
+          <span>Categorii</span>
+        </button>
+
         {/* 'Toate' button */}
         <button
           onClick={() => onSelectCategory('Toate')}
@@ -72,16 +82,6 @@ export const CategoryTabs: React.FC<CategoryTabsProps> = ({
             </button>
           );
         })}
-
-        {/* Manage Categories Button */}
-        <button
-          onClick={onOpenManageCategories}
-          title="Modifică sau adaugă categorii"
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-stone-100 hover:bg-stone-200 text-stone-700 border border-dashed border-stone-300 transition-colors cursor-pointer"
-        >
-          <SlidersHorizontal className="w-3.5 h-3.5 text-stone-500" />
-          <span>Categorii</span>
-        </button>
       </div>
     </div>
   );
