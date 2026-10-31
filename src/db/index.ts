@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Recipe, ShoppingItem, AppBackup, CategoryItem } from '../types/recipe';
+import type { Recipe, ShoppingItem, AppBackup, CategoryItem, MealPlanEntry } from '../types/recipe';
 import { DEFAULT_CATEGORIES } from '../types/recipe';
 import { SAMPLE_RECIPES } from './sampleRecipes';
 
@@ -7,6 +7,7 @@ export class CookbookDatabase extends Dexie {
   recipes!: Table<Recipe, string>;
   shoppingList!: Table<ShoppingItem, string>;
   categories!: Table<CategoryItem, string>;
+  mealPlans!: Table<MealPlanEntry, string>;
 
   constructor() {
     super('CookbookDB');
@@ -18,6 +19,12 @@ export class CookbookDatabase extends Dexie {
       recipes: 'id, title, category, *tags, isFavorite, createdAt, updatedAt',
       shoppingList: 'id, name, checked, createdAt',
       categories: 'id, label, order',
+    });
+    this.version(3).stores({
+      recipes: 'id, title, category, *tags, isFavorite, createdAt, updatedAt',
+      shoppingList: 'id, name, checked, aisle, createdAt',
+      categories: 'id, label, order',
+      mealPlans: 'id, date, mealType, recipeId, createdAt',
     });
   }
 }
@@ -64,12 +71,14 @@ export async function exportDatabaseBackup(): Promise<string> {
   const recipes = await db.recipes.toArray();
   const shoppingList = await db.shoppingList.toArray();
   const categories = await db.categories.toArray();
+  const mealPlans = await db.mealPlans.toArray();
   const backup: AppBackup = {
-    version: 2,
+    version: 3,
     exportDate: new Date().toISOString(),
     recipes,
     shoppingList,
     categories,
+    mealPlans,
   };
   return JSON.stringify(backup, null, 2);
 }
@@ -82,7 +91,7 @@ export async function importDatabaseBackup(jsonString: string): Promise<{ succes
       throw new Error('Formatul fișierului este invalid (nu conține o listă de rețete validă).');
     }
 
-    await db.transaction('rw', db.recipes, db.shoppingList, db.categories, async () => {
+    await db.transaction('rw', db.recipes, db.shoppingList, db.categories, db.mealPlans, async () => {
       for (const recipe of backup.recipes) {
         await db.recipes.put(recipe);
       }
@@ -94,6 +103,11 @@ export async function importDatabaseBackup(jsonString: string): Promise<{ succes
       if (backup.categories && Array.isArray(backup.categories)) {
         for (const cat of backup.categories) {
           await db.categories.put(cat);
+        }
+      }
+      if (backup.mealPlans && Array.isArray(backup.mealPlans)) {
+        for (const mp of backup.mealPlans) {
+          await db.mealPlans.put(mp);
         }
       }
     });

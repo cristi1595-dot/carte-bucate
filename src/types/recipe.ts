@@ -60,12 +60,47 @@ export interface Recipe {
   updatedAt: number;
 }
 
+export type SupermarketAisle =
+  | 'Legume & Fructe'
+  | 'Lactate & Ouă'
+  | 'Carne & Pește'
+  | 'Panificație'
+  | 'Băcănie & Condimente'
+  | 'Congelate'
+  | 'Băuturi'
+  | 'Altele';
+
+export const SUPERMARKET_AISLES: { id: SupermarketAisle; label: string; icon: string }[] = [
+  { id: 'Legume & Fructe', label: 'Legume & Fructe', icon: '🥦' },
+  { id: 'Lactate & Ouă', label: 'Lactate & Ouă', icon: '🧀' },
+  { id: 'Carne & Pește', label: 'Carne & Pește', icon: '🥩' },
+  { id: 'Panificație', label: 'Panificație', icon: '🥖' },
+  { id: 'Băcănie & Condimente', label: 'Băcănie & Condimente', icon: '🧂' },
+  { id: 'Congelate', label: 'Congelate', icon: '❄️' },
+  { id: 'Băuturi', label: 'Băuturi', icon: '🧃' },
+  { id: 'Altele', label: 'Altele', icon: '🛒' },
+];
+
 export interface ShoppingItem {
   id: string;
   name: string;
   amount?: string;
   recipeTitle?: string;
+  aisle?: SupermarketAisle;
   checked: boolean;
+  createdAt: number;
+}
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+export interface MealPlanEntry {
+  id: string;
+  date: string; // 'YYYY-MM-DD'
+  mealType: MealType;
+  recipeId: string;
+  recipeTitle: string;
+  recipeCategory?: string;
+  servings: number;
   createdAt: number;
 }
 
@@ -75,4 +110,5 @@ export interface AppBackup {
   recipes: Recipe[];
   shoppingList: ShoppingItem[];
   categories?: CategoryItem[];
+  mealPlans?: MealPlanEntry[];
 }

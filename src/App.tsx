@@ -13,6 +13,8 @@ import { AddRecipeModal } from './components/AddRecipeModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ShoppingListModal } from './components/ShoppingListModal';
 import { ManageCategoriesModal } from './components/ManageCategoriesModal';
+import { MealPlannerModal } from './components/MealPlannerModal';
+import { prepareShoppingItem } from './services/groceryClassifier';
 import { Plus } from 'lucide-react';
 
 export function App() {
@@ -37,6 +39,7 @@ export function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isShoppingListModalOpen, setIsShoppingListModalOpen] = useState(false);
   const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
+  const [isMealPlannerOpen, setIsMealPlannerOpen] = useState(false);
 
   // Share Target Web API parameters
   const [shareText, setShareText] = useState<string | undefined>(undefined);
@@ -137,14 +140,7 @@ export function App() {
   };
 
   const handleAddToShoppingList = async (items: { name: string; amount?: string; recipeTitle: string }[]) => {
-    const newItems = items.map((i) => ({
-      id: 'shop-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
-      name: i.name,
-      amount: i.amount,
-      recipeTitle: i.recipeTitle,
-      checked: false,
-      createdAt: Date.now(),
-    }));
+    const newItems = items.map((i) => prepareShoppingItem(i.name, i.amount, i.recipeTitle));
     await db.shoppingList.bulkAdd(newItems);
   };
 
@@ -168,6 +164,7 @@ export function App() {
         }}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenShoppingList={() => setIsShoppingListModalOpen(true)}
+        onOpenMealPlanner={() => setIsMealPlannerOpen(true)}
         shoppingListCount={shoppingItems.filter((i) => !i.checked).length}
         filterFavoritesOnly={filterFavoritesOnly}
         onToggleFavoritesOnly={() => setFilterFavoritesOnly(!filterFavoritesOnly)}
@@ -346,6 +343,21 @@ export function App() {
           onClose={() => setIsShoppingListModalOpen(false)}
           onRefreshItems={() => {
             // Live query updates automatically
+          }}
+        />
+      )}
+
+      {/* Meal Planner Modal */}
+      {isMealPlannerOpen && (
+        <MealPlannerModal
+          onClose={() => setIsMealPlannerOpen(false)}
+          onOpenShoppingList={() => {
+            setIsMealPlannerOpen(false);
+            setIsShoppingListModalOpen(true);
+          }}
+          onSelectRecipe={(recipe) => {
+            setIsMealPlannerOpen(false);
+            setActiveDetailRecipe(recipe);
           }}
         />
       )}

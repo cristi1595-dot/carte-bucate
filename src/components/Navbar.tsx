@@ -1,10 +1,11 @@
 import React from 'react';
-import { Plus, Settings, ShoppingCart, BookOpen, Heart } from 'lucide-react';
+import { Plus, Settings, ShoppingCart, BookOpen, Heart, CalendarDays } from 'lucide-react';
 
 interface NavbarProps {
   onOpenAdd: () => void;
   onOpenSettings: () => void;
   onOpenShoppingList: () => void;
+  onOpenMealPlanner: () => void;
   shoppingListCount: number;
   filterFavoritesOnly: boolean;
   onToggleFavoritesOnly: () => void;
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAdd,
   onOpenSettings,
   onOpenShoppingList,
+  onOpenMealPlanner,
   shoppingListCount,
   filterFavoritesOnly,
   onToggleFavoritesOnly,
@@ -58,6 +60,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {favoritesCount}
               </span>
             )}
+          </button>
+
+          {/* Meal Planner Button */}
+          <button
+            onClick={onOpenMealPlanner}
+            title="Planificator de Mese (Săptămânal)"
+            className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+          >
+            <CalendarDays className="w-5 h-5" />
           </button>
 
           {/* Shopping List Button */}
