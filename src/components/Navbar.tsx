@@ -30,30 +30,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-stone-200 shadow-xs">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div className="max-w-6xl mx-auto px-2 sm:px-4 h-16 flex items-center justify-between gap-1.5 sm:gap-3">
         {/* Logo & Brand */}
-        <div className="flex items-center gap-2.5 cursor-pointer select-none">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-orange-500 flex items-center justify-center text-white shadow-sm shadow-orange-500/20">
+        <div className="flex items-center gap-2 sm:gap-2.5 cursor-pointer select-none min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-orange-500 flex items-center justify-center text-white shadow-sm shadow-orange-500/20 shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-stone-900 leading-tight tracking-tight flex items-center gap-1.5">
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-stone-900 leading-tight tracking-tight truncate">
               Cartea de Bucate
-              <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-md">
-                PWA
-              </span>
             </h1>
             <p className="text-xs text-stone-500 hidden sm:block">Rețetele tale, organizate inteligent</p>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Favorites toggle */}
           <button
             onClick={onToggleFavoritesOnly}
             title="Vezi doar favoritele"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`flex items-center gap-1 sm:gap-1.5 p-2 sm:px-3 sm:py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
               filterFavoritesOnly
                 ? 'bg-rose-50 text-rose-600 border border-rose-200'
                 : 'text-stone-600 hover:bg-stone-100'
@@ -72,29 +69,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenMealPlanner}
             title="Planificator de Mese (Săptămânal)"
-            className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           >
-            <CalendarDays className="w-5 h-5" />
+            <CalendarDays className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           {/* Pantry Button */}
           <button
             onClick={onOpenPantry}
             title="Cămară (Alimente în stoc)"
-            className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           >
-            <Package className="w-5 h-5" />
+            <Package className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           {/* Shopping List Button */}
           <button
             onClick={onOpenShoppingList}
             title="Lista de cumpărături"
-            className="relative p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors"
+            className="relative p-2 sm:p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           >
-            <ShoppingCart className="w-5 h-5" />
+            <ShoppingCart className="w-4 h-4 sm:w-5 sm:h-5" />
             {shoppingListCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-orange-600 text-white text-[11px] font-bold rounded-full flex items-center justify-center animate-pulse">
+              <span className="absolute -top-1 -right-1 w-4.5 h-4.5 sm:w-5 sm:h-5 bg-orange-600 text-white text-[10px] sm:text-[11px] font-bold rounded-full flex items-center justify-center animate-pulse">
                 {shoppingListCount}
               </span>
             )}
@@ -104,15 +101,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenSync}
             title={syncCode ? `Sincronizare Cloud Activă (${syncCode})` : 'Sincronizare Cloud (Multi-Device)'}
-            className={`relative p-2.5 rounded-xl transition-all cursor-pointer ${
+            className={`relative p-2 sm:p-2.5 rounded-xl transition-all cursor-pointer ${
               syncCode
                 ? 'text-orange-600 bg-orange-50 hover:bg-orange-100/80 shadow-2xs'
                 : 'text-stone-600 hover:bg-stone-100'
             }`}
           >
-            <Cloud className="w-5 h-5" />
+            <Cloud className="w-4 h-4 sm:w-5 sm:h-5" />
             {syncCode && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white" />
+              <span className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-white" />
             )}
           </button>
 
@@ -120,18 +117,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onOpenSettings}
             title="Setări, Cheie API & Backup"
-            className="p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
           {/* Add Recipe Primary Button */}
           <button
             onClick={onOpenAdd}
-            className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-sm font-semibold shadow-sm shadow-orange-600/30 transition-all cursor-pointer"
+            className="flex items-center gap-1 sm:gap-1.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white px-2.5 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold shadow-sm shadow-orange-600/30 transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Adaugă Rețetă</span>
+            <span className="hidden sm:inline">Adaugă Rețetă</span>
+            <span className="inline sm:hidden">Adaugă</span>
           </button>
         </div>
       </div>
