@@ -1,5 +1,5 @@
 import { parseRecipeFromText, parseRecipeFromImage, hasApiKey, type ParsedRecipeData } from './geminiParser';
-import { parseRecipeWithGroq, hasGroqApiKey } from './groqParser';
+import { parseRecipeWithGroq, parseRecipeFromImageWithGroq, hasGroqApiKey } from './groqParser';
 import { parseRecipeWithDeepSeek, hasDeepSeekApiKey } from './deepseekParser';
 import { extractTextWithOcr, type OcrProgress } from './ocrService';
 
@@ -117,24 +117,37 @@ export async function extractRecipeFromImage(
   onOcrProgress?: (info: OcrProgress) => void
 ): Promise<ParsedRecipeData> {
   const geminiAvailable = hasApiKey();
+  const groqAvailable = hasGroqApiKey();
+  const deepseekAvailable = hasDeepSeekApiKey();
   const preferred = getPreferredProvider();
 
-  // If Gemini is explicitly preferred or Gemini is available and preferred !== 'deepseek', try Gemini Vision first
-  if (geminiAvailable && preferred === 'gemini') {
+  // 1. Try Gemini Vision if Gemini is available
+  if (geminiAvailable && (preferred === 'gemini' || preferred === 'auto')) {
     try {
-      onOcrProgress?.({ progress: 40, status: 'Analiză imagine cu Gemini Vision...' });
+      onOcrProgress?.({ progress: 30, status: 'Analiză imagine cu Google Gemini Vision...' });
       const res = await parseRecipeFromImage(base64DataUrl);
       onOcrProgress?.({ progress: 100, status: 'Rețetă extrasă cu succes!' });
       return res;
     } catch (gemErr: any) {
-      console.warn('Gemini Vision failed, attempting OCR fallback:', gemErr);
-      // Fall through to OCR if Gemini Vision fails
+      console.warn('Gemini Vision failed, attempting alternative/fallback:', gemErr);
     }
   }
 
-  // If DeepSeek or Groq is configured (or if Gemini failed), use Local Browser OCR + Text AI
-  if (hasDeepSeekApiKey() || hasGroqApiKey() || geminiAvailable) {
-    onOcrProgress?.({ progress: 10, status: 'Scanare text din imagine cu OCR local...' });
+  // 2. Try Groq Vision if Groq is available
+  if (groqAvailable && (preferred === 'groq' || preferred === 'auto')) {
+    try {
+      onOcrProgress?.({ progress: 35, status: 'Analiză imagine cu Groq Vision...' });
+      const res = await parseRecipeFromImageWithGroq(base64DataUrl);
+      onOcrProgress?.({ progress: 100, status: 'Rețetă extrasă cu succes!' });
+      return res;
+    } catch (groqErr: any) {
+      console.warn('Groq Vision failed, falling back to OCR:', groqErr);
+    }
+  }
+
+  // 3. Fallback to Local Browser OCR (Tesseract.js) + Text AI structuring
+  if (deepseekAvailable || groqAvailable || geminiAvailable) {
+    onOcrProgress?.({ progress: 15, status: 'Scanare text din imagine cu OCR local...' });
     const ocrText = await extractTextWithOcr(base64DataUrl, onOcrProgress);
 
     if (!ocrText || ocrText.length < 15) {
@@ -151,6 +164,6 @@ export async function extractRecipeFromImage(
 
   // If no AI key is configured at all
   throw new Error(
-    'Pentru scanarea imaginilor este necesară o cheie DeepSeek, Gemini sau Groq configurată în Setări.'
+    'Pentru scanarea imaginilor este necesară o cheie gratuită Gemini sau Groq configurată în Setări.'
   );
 }

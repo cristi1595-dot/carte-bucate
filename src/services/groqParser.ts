@@ -50,15 +50,68 @@ Reguli:
 2. "amount" trebuie să fie numeric (ex: 2.5, 200, 3) sau null.
 3. Dacă textul menționează un timp de fierbere/coacere (ex: 20 min), include-l în "timerMinutes".`;
 
+function cleanAndParseGroqJson(rawText: string): ParsedRecipeData {
+  const cleaned = rawText
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim();
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      parsed = JSON.parse(match[0]);
+    } else {
+      throw new Error('Răspunsul primit de la Groq nu are un format JSON valid.');
+    }
+  }
+
+  // Validate & map category
+  const validCategoryIds = RECIPE_CATEGORIES.map((c) => c.id);
+  let category: RecipeCategory = 'Fel Principal';
+  if (validCategoryIds.includes(parsed.category)) {
+    category = parsed.category;
+  }
+
+  const ingredients: Ingredient[] = (parsed.ingredients || []).map((ing: any, idx: number) => ({
+    id: 'ing-' + Date.now() + '-' + idx,
+    name: ing.name || 'Ingredient',
+    amount: typeof ing.amount === 'number' ? ing.amount : null,
+    unit: ing.unit || '',
+    originalText: ing.originalText || `${ing.amount || ''} ${ing.unit || ''} ${ing.name || ''}`.trim(),
+  }));
+
+  const instructions: InstructionStep[] = (parsed.instructions || []).map((step: any, idx: number) => ({
+    id: 'step-' + Date.now() + '-' + idx,
+    stepNumber: step.stepNumber || idx + 1,
+    text: step.text || '',
+    timerMinutes: typeof step.timerMinutes === 'number' && step.timerMinutes > 0 ? step.timerMinutes : undefined,
+  }));
+
+  return {
+    title: parsed.title || 'Rețetă Fără Titlu',
+    category,
+    tags: Array.isArray(parsed.tags) ? parsed.tags : ['rețetă'],
+    servings: typeof parsed.servings === 'number' && parsed.servings > 0 ? parsed.servings : 4,
+    prepTimeMinutes: parsed.prepTimeMinutes,
+    cookTimeMinutes: parsed.cookTimeMinutes,
+    ingredients,
+    instructions,
+    notes: parsed.notes,
+  };
+}
+
 export async function parseRecipeWithGroq(text: string, customApiKey?: string): Promise<ParsedRecipeData> {
   const apiKey = customApiKey || getStoredGroqApiKey();
   if (!apiKey) {
-    throw new Error('Cheia Groq API lipsește.');
+    throw new Error('Cheia Groq API lipsește. Adaug-o în secțiunea Setări.');
   }
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
-  const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
-  let lastError = '';
+  const models = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+  const errors: string[] = [];
 
   for (const model of models) {
     try {
@@ -81,7 +134,8 @@ export async function parseRecipeWithGroq(text: string, customApiKey?: string): 
 
       if (!response.ok) {
         const errorText = await response.text();
-        lastError = `Groq (${response.status}): ${errorText}`;
+        errors.push(`${model}: (${response.status}) ${errorText}`);
+        console.warn(`Groq model ${model} failed (${response.status}), trying next model...`, errorText);
         continue;
       }
 
@@ -91,45 +145,75 @@ export async function parseRecipeWithGroq(text: string, customApiKey?: string): 
         throw new Error('Groq nu a returnat conținut.');
       }
 
-      const parsed = JSON.parse(rawText);
-
-      // Validate & map category
-      const validCategoryIds = RECIPE_CATEGORIES.map((c) => c.id);
-      let category: RecipeCategory = 'Fel Principal';
-      if (validCategoryIds.includes(parsed.category)) {
-        category = parsed.category;
-      }
-
-      const ingredients: Ingredient[] = (parsed.ingredients || []).map((ing: any, idx: number) => ({
-        id: 'ing-' + Date.now() + '-' + idx,
-        name: ing.name || 'Ingredient',
-        amount: typeof ing.amount === 'number' ? ing.amount : null,
-        unit: ing.unit || '',
-        originalText: ing.originalText || `${ing.amount || ''} ${ing.unit || ''} ${ing.name || ''}`.trim(),
-      }));
-
-      const instructions: InstructionStep[] = (parsed.instructions || []).map((step: any, idx: number) => ({
-        id: 'step-' + Date.now() + '-' + idx,
-        stepNumber: step.stepNumber || idx + 1,
-        text: step.text || '',
-        timerMinutes: typeof step.timerMinutes === 'number' && step.timerMinutes > 0 ? step.timerMinutes : undefined,
-      }));
-
-      return {
-        title: parsed.title || 'Rețetă Fără Titlu',
-        category,
-        tags: Array.isArray(parsed.tags) ? parsed.tags : ['rețetă'],
-        servings: typeof parsed.servings === 'number' && parsed.servings > 0 ? parsed.servings : 4,
-        prepTimeMinutes: parsed.prepTimeMinutes,
-        cookTimeMinutes: parsed.cookTimeMinutes,
-        ingredients,
-        instructions,
-        notes: parsed.notes,
-      };
+      return cleanAndParseGroqJson(rawText);
     } catch (err: any) {
-      lastError = err?.message || 'Eroare apel Groq';
+      errors.push(`${model}: ${err?.message || 'Eroare necunoscută'}`);
     }
   }
 
-  throw new Error(`Eroare apelare Groq API: ${lastError}`);
+  throw new Error(`Eroare apelare Groq API: ${errors[errors.length - 1] || 'Toate modelele Groq au eșuat.'}`);
+}
+
+export async function parseRecipeFromImageWithGroq(
+  base64DataUrl: string,
+  customApiKey?: string
+): Promise<ParsedRecipeData> {
+  const apiKey = customApiKey || getStoredGroqApiKey();
+  if (!apiKey) {
+    throw new Error('Cheia Groq API lipsește.');
+  }
+
+  const url = 'https://api.groq.com/openai/v1/chat/completions';
+  const visionModels = ['qwen/qwen3.8-27b', 'llama-3.2-11b-vision-preview'];
+  const errors: string[] = [];
+
+  for (const model of visionModels) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `${SYSTEM_PROMPT}\n\nTe rog să citești această imagine (screenshot sau poză dintr-o carte de bucate) și să extragi rețeta culinară conform instrucțiunilor.`,
+                },
+                {
+                  type: 'image_url',
+                  image_url: { url: base64DataUrl },
+                },
+              ],
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        errors.push(`${model}: (${response.status}) ${errorText}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const rawText = data.choices?.[0]?.message?.content;
+      if (!rawText) {
+        throw new Error('Groq Vision nu a returnat conținut.');
+      }
+
+      return cleanAndParseGroqJson(rawText);
+    } catch (err: any) {
+      errors.push(`${model}: ${err?.message || 'Eroare necunoscută'}`);
+    }
+  }
+
+  throw new Error(`Eroare apelare Groq Vision: ${errors[errors.length - 1] || 'Modelele Vision nu au putut procesa imaginea.'}`);
 }
