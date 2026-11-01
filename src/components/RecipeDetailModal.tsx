@@ -6,6 +6,7 @@ import { db } from '../db';
 import { convertIngredientUnit, type UnitSystem } from '../services/unitConverter';
 import { parseInstructionTimers, formatTimerSeconds } from '../services/timerParser';
 import { estimateNutritionWithAI } from '../services/nutritionService';
+import { uploadRecipeToCloud } from '../services/firebaseSync';
 import {
   X,
   Clock,
@@ -172,17 +173,26 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
   const handleUpdateRating = async (newRating: number) => {
     const updated = newRating === rating ? 0 : newRating;
     setRating(updated);
-    await db.recipes.update(recipe.id, { rating: updated, updatedAt: Date.now() });
+    const now = Date.now();
+    await db.recipes.update(recipe.id, { rating: updated, updatedAt: now });
+    const fresh = await db.recipes.get(recipe.id);
+    if (fresh) uploadRecipeToCloud(fresh);
   };
 
   const handleToggleFavorite = async () => {
     const updated = !isFavorite;
     setIsFavorite(updated);
-    await db.recipes.update(recipe.id, { isFavorite: updated, updatedAt: Date.now() });
+    const now = Date.now();
+    await db.recipes.update(recipe.id, { isFavorite: updated, updatedAt: now });
+    const fresh = await db.recipes.get(recipe.id);
+    if (fresh) uploadRecipeToCloud(fresh);
   };
 
   const handleSaveNotes = async () => {
-    await db.recipes.update(recipe.id, { notes, updatedAt: Date.now() });
+    const now = Date.now();
+    await db.recipes.update(recipe.id, { notes, updatedAt: now });
+    const fresh = await db.recipes.get(recipe.id);
+    if (fresh) uploadRecipeToCloud(fresh);
   };
 
   const handleSendToShoppingList = () => {

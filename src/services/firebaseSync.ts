@@ -1,15 +1,17 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
   collection,
   doc,
   getDocs,
   setDoc,
+  deleteDoc,
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../db';
-import type { Recipe, ShoppingItem, MealPlanEntry, PantryItem } from '../types/recipe';
+import type { Recipe, ShoppingItem, MealPlanEntry, PantryItem, CategoryItem } from '../types/recipe';
 
 // Firebase configuration for Carte de Bucate
 export const FIREBASE_CONFIG = {
@@ -33,14 +35,99 @@ export interface SyncStatus {
   errorMessage?: string;
 }
 
+let cachedFirestore: ReturnType<typeof getFirestore> | null = null;
+
 // Initialize Firebase App
 export function getFirebaseApp() {
   return getApps().length > 0 ? getApp() : initializeApp(FIREBASE_CONFIG);
 }
 
-// Get Firestore instance
+// Get Firestore instance with ignoreUndefinedProperties enabled
 export function getFirebaseDb() {
-  return getFirestore(getFirebaseApp());
+  if (cachedFirestore) return cachedFirestore;
+  const app = getFirebaseApp();
+  try {
+    cachedFirestore = initializeFirestore(app, {
+      ignoreUndefinedProperties: true,
+    });
+  } catch {
+    cachedFirestore = getFirestore(app);
+  }
+  return cachedFirestore;
+}
+
+/**
+ * Deeply removes all undefined values from objects and arrays so Firestore never throws:
+ * "Unsupported field value: undefined"
+ */
+export function cleanForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data
+      .filter((item) => item !== undefined)
+      .map((item) => cleanForFirestore(item)) as any;
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
+export function cleanRecipeForFirestore(recipe: Recipe): Record<string, any> {
+  const base: Record<string, any> = cleanForFirestore(recipe);
+  const now = Date.now();
+  base.createdAt = base.createdAt || now;
+  base.updatedAt = base.updatedAt || base.createdAt || now;
+
+  // Clean empty or undefined optional strings
+  if (typeof base.notes === 'string' && !base.notes.trim()) delete base.notes;
+  if (typeof base.sourceUrl === 'string' && !base.sourceUrl.trim()) delete base.sourceUrl;
+  if (typeof base.originalText === 'string' && !base.originalText.trim()) delete base.originalText;
+  if (!base.image) delete base.image;
+
+  // Unrated recipes or 0 rating: omit so it matches Firestore rules
+  if (base.rating === undefined || base.rating === null || base.rating <= 0) {
+    delete base.rating;
+  }
+
+  return base;
+}
+
+export function cleanPantryItemForFirestore(item: PantryItem): Record<string, any> {
+  const base: Record<string, any> = cleanForFirestore(item);
+  base.updatedAt = base.updatedAt || Date.now();
+  if (typeof base.amount === 'string' && !base.amount.trim()) delete base.amount;
+  if (typeof base.expiresAt === 'string' && !base.expiresAt.trim()) delete base.expiresAt;
+  return base;
+}
+
+export function cleanShoppingItemForFirestore(item: ShoppingItem): Record<string, any> {
+  const base: Record<string, any> = cleanForFirestore(item);
+  base.createdAt = base.createdAt || Date.now();
+  if (typeof base.amount === 'string' && !base.amount.trim()) delete base.amount;
+  if (typeof base.recipeTitle === 'string' && !base.recipeTitle.trim()) delete base.recipeTitle;
+  return base;
+}
+
+export function cleanMealPlanForFirestore(entry: MealPlanEntry): Record<string, any> {
+  const base: Record<string, any> = cleanForFirestore(entry);
+  base.createdAt = base.createdAt || Date.now();
+  if (typeof base.recipeCategory === 'string' && !base.recipeCategory.trim()) delete base.recipeCategory;
+  return base;
+}
+
+export function cleanCategoryForFirestore(cat: CategoryItem): Record<string, any> {
+  const base: Record<string, any> = cleanForFirestore(cat);
+  if (typeof base.icon === 'string' && !base.icon.trim()) delete base.icon;
+  return base;
 }
 
 export function getStoredSyncCode(): string | null {
@@ -125,12 +212,12 @@ export async function performFullSync(
       const remote = remoteRecipesMap.get(local.id);
       if (!remote) {
         // Exists locally, not in remote -> upload
-        await setDoc(doc(recipesRef, local.id), local);
+        await setDoc(doc(recipesRef, local.id), cleanRecipeForFirestore(local));
       } else {
         const localTime = local.updatedAt || local.createdAt || 0;
         const remoteTime = remote.updatedAt || remote.createdAt || 0;
         if (localTime > remoteTime) {
-          await setDoc(doc(recipesRef, local.id), local);
+          await setDoc(doc(recipesRef, local.id), cleanRecipeForFirestore(local));
         } else if (remoteTime > localTime) {
           await db.recipes.put(remote);
         }
@@ -157,12 +244,12 @@ export async function performFullSync(
     for (const local of localPantry) {
       const remote = remotePantryMap.get(local.id);
       if (!remote) {
-        await setDoc(doc(pantryRef, local.id), local);
+        await setDoc(doc(pantryRef, local.id), cleanPantryItemForFirestore(local));
       } else {
         const localTime = local.updatedAt || 0;
         const remoteTime = remote.updatedAt || 0;
         if (localTime > remoteTime) {
-          await setDoc(doc(pantryRef, local.id), local);
+          await setDoc(doc(pantryRef, local.id), cleanPantryItemForFirestore(local));
         } else if (remoteTime > localTime) {
           await db.pantry.put(remote);
         }
@@ -187,12 +274,12 @@ export async function performFullSync(
     for (const local of localShopping) {
       const remote = remoteShoppingMap.get(local.id);
       if (!remote) {
-        await setDoc(doc(shoppingRef, local.id), local);
+        await setDoc(doc(shoppingRef, local.id), cleanShoppingItemForFirestore(local));
       } else {
         const localTime = local.createdAt || 0;
         const remoteTime = remote.createdAt || 0;
         if (localTime >= remoteTime) {
-          await setDoc(doc(shoppingRef, local.id), local);
+          await setDoc(doc(shoppingRef, local.id), cleanShoppingItemForFirestore(local));
         } else {
           await db.shoppingList.put(remote);
         }
@@ -217,9 +304,9 @@ export async function performFullSync(
     for (const local of localMealPlans) {
       const remote = remoteMealPlansMap.get(local.id);
       if (!remote) {
-        await setDoc(doc(mealPlansRef, local.id), local);
+        await setDoc(doc(mealPlansRef, local.id), cleanMealPlanForFirestore(local));
       } else {
-        await setDoc(doc(mealPlansRef, local.id), local);
+        await setDoc(doc(mealPlansRef, local.id), cleanMealPlanForFirestore(local));
       }
     }
 
@@ -229,16 +316,41 @@ export async function performFullSync(
       }
     }
 
-    // 5. Update Meta
+    // 5. Reconcile Categories
+    onProgress?.('Sincronizare categorii...');
+    const categoriesRef = collection(firestore, 'syncRooms', code, 'categories');
+    const localCategories = await db.categories.toArray();
+    const remoteCategoriesSnap = await getDocs(categoriesRef);
+    const remoteCategoriesMap = new Map<string, CategoryItem>();
+
+    remoteCategoriesSnap.forEach((d) => remoteCategoriesMap.set(d.id, d.data() as CategoryItem));
+
+    for (const local of localCategories) {
+      const remote = remoteCategoriesMap.get(local.id);
+      if (!remote) {
+        await setDoc(doc(categoriesRef, local.id), cleanCategoryForFirestore(local));
+      } else {
+        await setDoc(doc(categoriesRef, local.id), cleanCategoryForFirestore(local));
+      }
+    }
+
+    for (const [id, remote] of remoteCategoriesMap.entries()) {
+      if (!localCategories.some((l) => l.id === id)) {
+        await db.categories.put(remote);
+      }
+    }
+
+    // 6. Update Meta
     const metaRef = doc(firestore, 'syncRooms', code, 'meta', 'info');
     const now = Date.now();
     await setDoc(
       metaRef,
-      {
+      cleanForFirestore({
         lastSyncedAt: now,
         syncCode: code,
-        recipeCount: (await db.recipes.count()),
-      },
+        recipeCount: await db.recipes.count(),
+        updatedAt: now,
+      }),
       { merge: true }
     );
 
@@ -350,7 +462,41 @@ export function startRealtimeSync(
     (err) => console.warn('Shopping list realtime listener warning:', err)
   );
 
-  activeUnsubscribes = [unsubsRecipes, unsubsPantry, unsubsShopping];
+  // Listen to Meal Plans
+  const unsubsMealPlans = onSnapshot(
+    collection(firestore, 'syncRooms', code, 'mealPlans'),
+    async (snapshot) => {
+      if (isLocalSyncInProgress) return;
+      for (const change of snapshot.docChanges()) {
+        const data = change.doc.data() as MealPlanEntry;
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.mealPlans.put(data);
+        } else if (change.type === 'removed') {
+          await db.mealPlans.delete(change.doc.id);
+        }
+      }
+    },
+    (err) => console.warn('Meal plans realtime listener warning:', err)
+  );
+
+  // Listen to Categories
+  const unsubsCategories = onSnapshot(
+    collection(firestore, 'syncRooms', code, 'categories'),
+    async (snapshot) => {
+      if (isLocalSyncInProgress) return;
+      for (const change of snapshot.docChanges()) {
+        const data = change.doc.data() as CategoryItem;
+        if (change.type === 'added' || change.type === 'modified') {
+          await db.categories.put(data);
+        } else if (change.type === 'removed') {
+          await db.categories.delete(change.doc.id);
+        }
+      }
+    },
+    (err) => console.warn('Categories realtime listener warning:', err)
+  );
+
+  activeUnsubscribes = [unsubsRecipes, unsubsPantry, unsubsShopping, unsubsMealPlans, unsubsCategories];
 
   return stopRealtimeSync;
 }
@@ -364,4 +510,103 @@ export function stopRealtimeSync(): void {
     }
   });
   activeUnsubscribes = [];
+}
+
+/**
+ * Instant background synchronization helpers for local mutations
+ */
+export async function uploadRecipeToCloud(recipe: Recipe): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const recipeRef = doc(firestore, 'syncRooms', code, 'recipes', recipe.id);
+    await setDoc(recipeRef, cleanRecipeForFirestore(recipe));
+  } catch (err) {
+    console.warn('Realtime cloud recipe upload failed:', err);
+  }
+}
+
+export async function deleteRecipeFromCloud(recipeId: string): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const recipeRef = doc(firestore, 'syncRooms', code, 'recipes', recipeId);
+    await deleteDoc(recipeRef);
+  } catch (err) {
+    console.warn('Realtime cloud recipe deletion failed:', err);
+  }
+}
+
+export async function uploadPantryItemToCloud(item: PantryItem): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const itemRef = doc(firestore, 'syncRooms', code, 'pantry', item.id);
+    await setDoc(itemRef, cleanPantryItemForFirestore(item));
+  } catch (err) {
+    console.warn('Realtime cloud pantry upload failed:', err);
+  }
+}
+
+export async function deletePantryItemFromCloud(itemId: string): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const itemRef = doc(firestore, 'syncRooms', code, 'pantry', itemId);
+    await deleteDoc(itemRef);
+  } catch (err) {
+    console.warn('Realtime cloud pantry deletion failed:', err);
+  }
+}
+
+export async function uploadShoppingItemToCloud(item: ShoppingItem): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const itemRef = doc(firestore, 'syncRooms', code, 'shoppingList', item.id);
+    await setDoc(itemRef, cleanShoppingItemForFirestore(item));
+  } catch (err) {
+    console.warn('Realtime cloud shopping item upload failed:', err);
+  }
+}
+
+export async function deleteShoppingItemFromCloud(itemId: string): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const itemRef = doc(firestore, 'syncRooms', code, 'shoppingList', itemId);
+    await deleteDoc(itemRef);
+  } catch (err) {
+    console.warn('Realtime cloud shopping item deletion failed:', err);
+  }
+}
+
+export async function uploadCategoryToCloud(cat: CategoryItem): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const catRef = doc(firestore, 'syncRooms', code, 'categories', cat.id);
+    await setDoc(catRef, cleanCategoryForFirestore(cat));
+  } catch (err) {
+    console.warn('Realtime cloud category upload failed:', err);
+  }
+}
+
+export async function deleteCategoryFromCloud(catId: string): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const catRef = doc(firestore, 'syncRooms', code, 'categories', catId);
+    await deleteDoc(catRef);
+  } catch (err) {
+    console.warn('Realtime cloud category deletion failed:', err);
+  }
 }

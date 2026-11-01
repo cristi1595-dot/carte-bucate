@@ -85,7 +85,7 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
 
   const [instructions, setInstructions] = useState<InstructionStep[]>(
     initialRecipe?.instructions || [
-      { id: '1', stepNumber: 1, text: '', timerMinutes: undefined },
+      { id: '1', stepNumber: 1, text: '' },
     ]
   );
 
@@ -322,7 +322,14 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
       .filter(Boolean);
 
     const validIngredients = ingredients.filter((i) => i.name.trim().length > 0);
-    const validInstructions = instructions.filter((s) => s.text.trim().length > 0);
+    const validInstructions = instructions
+      .filter((s) => s.text.trim().length > 0)
+      .map((s) => ({
+        id: s.id,
+        stepNumber: s.stepNumber,
+        text: s.text.trim(),
+        ...(s.timerMinutes ? { timerMinutes: s.timerMinutes } : {}),
+      }));
 
     const recipeToSave: Recipe = {
       id: initialRecipe?.id || 'recipe-' + Date.now(),
@@ -330,18 +337,18 @@ export const AddRecipeModal: React.FC<AddRecipeModalProps> = ({
       category,
       tags: tags.length > 0 ? tags : ['rețetă'],
       servings: Number(servings) || 4,
-      prepTimeMinutes: prepTimeMinutes !== '' ? Number(prepTimeMinutes) : undefined,
-      cookTimeMinutes: cookTimeMinutes !== '' ? Number(cookTimeMinutes) : undefined,
       ingredients: validIngredients,
       instructions: validInstructions,
-      notes: notes.trim() || undefined,
-      rating: initialRecipe?.rating || 0,
       isFavorite: initialRecipe?.isFavorite || false,
-      sourceUrl: sourceUrl.trim() || undefined,
-      originalText: originalText.trim() || undefined,
-      image: recipeImage,
       createdAt: initialRecipe?.createdAt || Date.now(),
       updatedAt: Date.now(),
+      ...(prepTimeMinutes !== '' ? { prepTimeMinutes: Number(prepTimeMinutes) } : {}),
+      ...(cookTimeMinutes !== '' ? { cookTimeMinutes: Number(cookTimeMinutes) } : {}),
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
+      ...(initialRecipe?.rating ? { rating: initialRecipe.rating } : {}),
+      ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}),
+      ...(originalText.trim() ? { originalText: originalText.trim() } : {}),
+      ...(recipeImage ? { image: recipeImage } : {}),
     };
 
     onSave(recipeToSave);

@@ -16,7 +16,12 @@ import { ManageCategoriesModal } from './components/ManageCategoriesModal';
 import { MealPlannerModal } from './components/MealPlannerModal';
 import { PantryModal } from './components/PantryModal';
 import { SyncModal } from './components/SyncModal';
-import { getStoredSyncCode, startRealtimeSync } from './services/firebaseSync';
+import {
+  getStoredSyncCode,
+  startRealtimeSync,
+  uploadRecipeToCloud,
+  deleteRecipeFromCloud,
+} from './services/firebaseSync';
 import { prepareShoppingItem } from './services/groceryClassifier';
 import { Plus } from 'lucide-react';
 
@@ -130,14 +135,18 @@ export function App() {
   // Handlers
   const handleToggleFavorite = async (recipe: Recipe, e: React.MouseEvent) => {
     e.stopPropagation();
-    await db.recipes.update(recipe.id, {
+    const updated = {
+      ...recipe,
       isFavorite: !recipe.isFavorite,
       updatedAt: Date.now(),
-    });
+    };
+    await db.recipes.put(updated);
+    uploadRecipeToCloud(updated);
   };
 
   const handleSaveRecipe = async (saved: Recipe) => {
     await db.recipes.put(saved);
+    uploadRecipeToCloud(saved);
     setIsAddModalOpen(false);
     setEditingRecipe(null);
     setShareText(undefined);
@@ -146,6 +155,7 @@ export function App() {
 
   const handleDeleteRecipe = async (id: string) => {
     await db.recipes.delete(id);
+    deleteRecipeFromCloud(id);
     setActiveDetailRecipe(null);
   };
 

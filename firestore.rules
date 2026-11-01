@@ -38,9 +38,9 @@ service cloud.firestore {
     //      - instructions: list (required, <= 150 items)
     //      - nutrition: map (optional, allowed keys: calories, protein, carbs, fat, fiber, estimatedAt)
     //      - notes: string (optional, <= 5000 chars)
-    //      - rating: number (optional, 1..5)
+    //      - rating: number (optional, 0..5)
     //      - isFavorite: bool (required)
-    //      - sourceUrl: string (optional, <= 2000 chars)
+    //      - sourceUrl: string (optional, <= 2000 chars, URL or text note)
     //      - originalText: string (optional, <= 50000 chars)
     //      - image: string (optional, <= 800000 chars for compressed base64/URL data)
     //      - createdAt: number | timestamp (required, immutable on update)
@@ -90,6 +90,8 @@ service cloud.firestore {
     // 7. Collection: /syncRooms/{syncCode}/meta/{metaId}
     //    Fields:
     //      - id: string (optional, <= 100 chars)
+    //      - syncCode: string (optional, 4..64 chars)
+    //      - recipeCount: number (optional, 0..100000)
     //      - lastSyncedAt: number | timestamp (optional)
     //      - deviceName: string (optional, <= 100 chars)
     //      - syncCodeHash: string (optional, <= 256 chars)
@@ -158,13 +160,6 @@ service cloud.firestore {
               request.resource.data[field] <= maxVal);
     }
 
-    function isValidOptionalUrl(field) {
-      return !(field in request.resource.data) ||
-             (request.resource.data[field] is string &&
-              request.resource.data[field].size() <= 2000 &&
-              (request.resource.data[field].matches('^https://.*') ||
-               request.resource.data[field].matches('^http://.*')));
-    }
 
     function isValidDateString(val) {
       return val is string && val.matches('^\\d{4}-\\d{2}-\\d{2}$');
@@ -218,9 +213,9 @@ service cloud.firestore {
              (!('tags' in data) || (data.tags is list && data.tags.size() <= 30)) &&
              isValidOptionalNumber('prepTimeMinutes', 0, 10080) &&
              isValidOptionalNumber('cookTimeMinutes', 0, 10080) &&
-             isValidOptionalNumber('rating', 1, 5) &&
+             isValidOptionalNumber('rating', 0, 5) &&
              isValidOptionalString('notes', 0, 5000) &&
-             isValidOptionalUrl('sourceUrl') &&
+             isValidOptionalString('sourceUrl', 0, 2000) &&
              isValidOptionalString('originalText', 0, 50000) &&
              isValidOptionalString('image', 0, 800000) &&
              (!('nutrition' in data) || isValidNutritionMap(data.nutrition));
@@ -276,8 +271,10 @@ service cloud.firestore {
     }
 
     function isValidMeta(data) {
-      return hasOnlyAllowedFields(['id', 'lastSyncedAt', 'deviceName', 'syncCodeHash', 'passphrase', 'createdAt', 'updatedAt', 'version']) &&
+      return hasOnlyAllowedFields(['id', 'syncCode', 'recipeCount', 'lastSyncedAt', 'deviceName', 'syncCodeHash', 'passphrase', 'createdAt', 'updatedAt', 'version']) &&
              isValidOptionalString('id', 1, 100) &&
+             isValidOptionalString('syncCode', 4, 64) &&
+             isValidOptionalNumber('recipeCount', 0, 100000) &&
              isValidOptionalTimestamp('lastSyncedAt') &&
              isValidOptionalString('deviceName', 1, 100) &&
              isValidOptionalString('syncCodeHash', 1, 256) &&
