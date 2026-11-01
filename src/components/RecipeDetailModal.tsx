@@ -232,6 +232,8 @@ export const RecipeDetailModal: React.FC<RecipeDetailModalProps> = ({
         nutrition: estimated,
         updatedAt: Date.now(),
       });
+      const fresh = await db.recipes.get(recipe.id);
+      if (fresh) uploadRecipeToCloud(fresh);
     } catch (err: any) {
       alert(err?.message || 'Eroare la calcularea valorilor nutriționale cu AI.');
     } finally {

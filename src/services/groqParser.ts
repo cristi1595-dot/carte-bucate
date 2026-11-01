@@ -208,7 +208,10 @@ export async function parseRecipeFromImageWithGroq(
   }
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
-  const visionModels = ['qwen/qwen3.8-27b', 'llama-3.2-11b-vision-preview'];
+  const availableModels = await getAvailableGroqModels(apiKey);
+  const preferredVision = ['qwen/qwen3.8-27b', 'qwen/qwen3-vl-32b-instruct', 'meta-models/muse-spark-open'];
+  const matchedVision = preferredVision.filter((m) => availableModels.includes(m));
+  const visionModels = matchedVision.length > 0 ? matchedVision : ['qwen/qwen3.8-27b'];
   const errors: string[] = [];
 
   for (const model of visionModels) {
