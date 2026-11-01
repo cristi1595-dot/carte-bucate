@@ -1,7 +1,7 @@
 import type { Ingredient, NutritionInfo } from '../types/recipe';
 import { getStoredDeepSeekApiKey, hasDeepSeekApiKey } from './deepseekParser';
 import { getStoredApiKey, hasApiKey } from './geminiParser';
-import { getStoredGroqApiKey, hasGroqApiKey } from './groqParser';
+import { getStoredGroqApiKey, hasGroqApiKey, getAvailableGroqModels } from './groqParser';
 import { getPreferredProvider } from './aiOrchestrator';
 
 const SYSTEM_PROMPT = `Ești un nutriționist și asistent culinar profesionist de top.
@@ -112,37 +112,52 @@ async function estimateWithDeepSeek(prompt: string): Promise<NutritionInfo> {
 
 async function estimateWithGroq(prompt: string): Promise<NutritionInfo> {
   const apiKey = getStoredGroqApiKey();
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
-    }),
-  });
+  if (!apiKey) throw new Error('Cheia Groq API lipsește.');
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Eroare Groq (${res.status}): ${errText}`);
+  const models = await getAvailableGroqModels(apiKey);
+  const errors: string[] = [];
+
+  for (const model of models) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        errors.push(`${model}: (${res.status}) ${errText}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Răspuns gol de la Groq');
+      return parseNutritionJson(content);
+    } catch (err: any) {
+      errors.push(`${model}: ${err?.message || 'Eroare necunoscută'}`);
+    }
   }
 
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Răspuns gol de la Groq');
-  return parseNutritionJson(content);
+  throw new Error(`Eroare Groq: ${errors[errors.length - 1] || 'Toate modelele Groq au eșuat.'}`);
 }
 
 async function estimateWithGemini(prompt: string): Promise<NutritionInfo> {
   const apiKey = getStoredApiKey();
-  const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+  if (!apiKey) throw new Error('Cheia Gemini API lipsește.');
+  const models = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
   let lastError = '';
 
   for (const model of models) {
@@ -162,7 +177,7 @@ async function estimateWithGemini(prompt: string): Promise<NutritionInfo> {
 
       if (!res.ok) {
         const errText = await res.text();
-        lastError = errText;
+        lastError = `${model}: (${res.status}) ${errText}`;
         continue;
       }
 

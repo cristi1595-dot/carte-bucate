@@ -50,6 +50,50 @@ Reguli:
 2. "amount" trebuie să fie numeric (ex: 2.5, 200, 3) sau null.
 3. Dacă textul menționează un timp de fierbere/coacere (ex: 20 min), include-l în "timerMinutes".`;
 
+let cachedGroqModels: { models: string[]; timestamp: number } | null = null;
+
+export async function getAvailableGroqModels(apiKey: string): Promise<string[]> {
+  const now = Date.now();
+  if (cachedGroqModels && now - cachedGroqModels.timestamp < 1000 * 60 * 30) {
+    return cachedGroqModels.models;
+  }
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/models', {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.data)) {
+        const chatModels = data.data
+          .map((m: any) => m.id as string)
+          .filter(
+            (id: string) =>
+              !id.includes('whisper') &&
+              !id.includes('guard') &&
+              !id.includes('prompt') &&
+              !id.includes('orpheus')
+          );
+        if (chatModels.length > 0) {
+          cachedGroqModels = { models: chatModels, timestamp: now };
+          return chatModels;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Could not fetch dynamic Groq models list:', e);
+  }
+
+  // Fallback defaults
+  return [
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'llama-3.1-8b-instant',
+    'llama-3.3-70b-versatile',
+    'qwen/qwen3.8-27b',
+  ];
+}
+
 function cleanAndParseGroqJson(rawText: string): ParsedRecipeData {
   const cleaned = rawText
     .replace(/^```(?:json)?\s*/i, '')
@@ -110,7 +154,7 @@ export async function parseRecipeWithGroq(text: string, customApiKey?: string): 
   }
 
   const url = 'https://api.groq.com/openai/v1/chat/completions';
-  const models = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'];
+  const models = await getAvailableGroqModels(apiKey);
   const errors: string[] = [];
 
   for (const model of models) {
