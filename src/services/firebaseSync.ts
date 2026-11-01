@@ -7,6 +7,7 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  writeBatch,
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
@@ -608,5 +609,22 @@ export async function deleteCategoryFromCloud(catId: string): Promise<void> {
     await deleteDoc(catRef);
   } catch (err) {
     console.warn('Realtime cloud category deletion failed:', err);
+  }
+}
+
+export async function uploadCategoriesOrderToCloud(categories: CategoryItem[]): Promise<void> {
+  const code = getStoredSyncCode();
+  if (!code) return;
+  try {
+    const firestore = getFirebaseDb();
+    const batch = writeBatch(firestore);
+    for (let i = 0; i < categories.length; i++) {
+      const cat = { ...categories[i], order: i + 1 };
+      const catRef = doc(firestore, 'syncRooms', code, 'categories', cat.id);
+      batch.set(catRef, cleanCategoryForFirestore(cat));
+    }
+    await batch.commit();
+  } catch (err) {
+    console.warn('Realtime cloud categories batch upload failed:', err);
   }
 }

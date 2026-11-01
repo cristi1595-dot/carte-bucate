@@ -187,6 +187,19 @@ export async function saveCategory(category: CategoryItem): Promise<void> {
   await db.categories.put(category);
 }
 
+// Reorder categories in bulk
+export async function reorderCategories(orderedCategories: CategoryItem[]): Promise<void> {
+  await db.transaction('rw', db.categories, async () => {
+    for (let i = 0; i < orderedCategories.length; i++) {
+      const cat = orderedCategories[i];
+      await db.categories.put({
+        ...cat,
+        order: i + 1,
+      });
+    }
+  });
+}
+
 // Delete a category
 export async function deleteCategory(id: string): Promise<void> {
   await db.categories.delete(id);
