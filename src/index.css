@@ -27,35 +27,93 @@
 
 /* Print Friendly formatting for Recipes (A4 Clean View) */
 @media print {
-  header, nav, .no-print, button:not(.print-show) {
+  /* 1. Hide everything outside the active recipe modal */
+  header,
+  nav,
+  main,
+  footer,
+  .no-print {
     display: none !important;
   }
 
   body {
     background-color: #ffffff !important;
-    color: #000000 !important;
-    font-size: 12pt;
+    background: #ffffff !important;
+    color: #1c1917 !important;
+    font-size: 11pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
+  /* Reset modal overlay container so it flows directly onto printable pages */
   .fixed.inset-0 {
     position: static !important;
+    display: block !important;
     background: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
     overflow: visible !important;
+    width: 100% !important;
+    height: auto !important;
   }
 
+  /* Recipe container fits clean A4 sheet */
   .recipe-print-area {
+    display: block !important;
+    position: static !important;
     box-shadow: none !important;
     border: none !important;
     max-width: 100% !important;
+    width: 100% !important;
     max-height: none !important;
+    height: auto !important;
     overflow: visible !important;
     border-radius: 0 !important;
     margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure scrollable body expands fully without scrollbars */
+  .recipe-print-area .overflow-y-auto,
+  .recipe-print-area > div {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  /* Preserve timer text inside instructions */
+  .recipe-print-area button:not(.no-print) {
+    display: inline-flex !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 2px !important;
+    font-weight: 700 !important;
+    font-size: inherit !important;
+  }
+
+  /* Hide interactive buttons */
+  button.no-print,
+  .no-print button {
+    display: none !important;
+  }
+
+  /* Prevent awkward page breaks */
+  h2, h3, h4, .grid {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  ul, ol, li, .flex.gap-3\.5 {
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 
   @page {
-    margin: 1.5cm;
+    margin: 1.2cm;
     size: auto;
   }
 }

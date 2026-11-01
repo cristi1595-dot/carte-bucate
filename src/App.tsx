@@ -201,7 +201,7 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto w-full px-2 sm:px-4 py-2 sm:py-3 flex-1 flex flex-col space-y-2 sm:space-y-3">
+      <main className="no-print max-w-6xl mx-auto w-full px-2 sm:px-4 py-2 sm:py-3 flex-1 flex flex-col space-y-2 sm:space-y-3">
         {/* Category Carousel Tabs */}
         <CategoryTabs
           categories={categories}
@@ -287,7 +287,7 @@ export function App() {
       </main>
 
       {/* Floating Action Button for Mobile Add */}
-      <div className="fixed bottom-5 right-5 sm:hidden z-30">
+      <div className="no-print fixed bottom-5 right-5 sm:hidden z-30">
         <button
           onClick={() => {
             setEditingRecipe(null);
